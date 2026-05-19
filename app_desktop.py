@@ -528,6 +528,8 @@ class DesktopNavigationApp(tk.Tk):
     """Janela principal Tkinter da aplicação desktop."""
 
     def __init__(self):
+        """Inicializa estado da aplicação, variáveis Tkinter e layout principal."""
+
         super().__init__()
         self.title("Navegação Pedestre Indoor - UTAD")
         self.geometry("1320x820")
@@ -557,14 +559,18 @@ class DesktopNavigationApp(tk.Tk):
         self.load_campus()
 
     def _build_layout(self):
-        """Constrói a interface: barra lateral de controlos e área do mapa."""
+        """Constrói a barra lateral de controlos e a área principal do mapa."""
 
+        # A janela tem duas zonas: coluna 0 com controlos e coluna 1 com o mapa.
+        # A coluna do mapa recebe o peso para crescer quando a janela aumenta.
         self.columnconfigure(1, weight=1)
         self.rowconfigure(0, weight=1)
 
         sidebar = ttk.Frame(self, padding=14)
         sidebar.grid(row=0, column=0, sticky="ns")
 
+        # Perfil influencia o cálculo da rota:
+        # normal não usa elevador; mobilidade reduzida não usa escadas.
         ttk.Label(sidebar, text="Perfil").grid(row=0, column=0, sticky="w")
         ttk.Radiobutton(
             sidebar,
@@ -581,6 +587,8 @@ class DesktopNavigationApp(tk.Tk):
 
         ttk.Separator(sidebar).grid(row=3, column=0, sticky="ew", pady=14)
 
+        # Origem e destino são escolhidos em três níveis para simplificar a UI:
+        # edifício -> piso/área -> sala/entrada.
         ttk.Label(sidebar, text="Edifício de origem").grid(row=4, column=0, sticky="w")
         self.origin_building_combo = ttk.Combobox(
             sidebar,
@@ -651,6 +659,8 @@ class DesktopNavigationApp(tk.Tk):
 
         ttk.Separator(sidebar).grid(row=18, column=0, sticky="ew", pady=14)
 
+        # O piso visível serve apenas para inspeção do mapa. A rota continua a
+        # existir mesmo quando se muda manualmente a vista.
         ttk.Label(sidebar, text="Piso visível").grid(row=19, column=0, sticky="w")
         self.visible_floor_combo = ttk.Combobox(
             sidebar,
@@ -687,6 +697,8 @@ class DesktopNavigationApp(tk.Tk):
         )
         status_label.grid(row=25, column=0, sticky="ew", pady=(6, 0))
 
+        # Matplotlib fica embutido no Tkinter através do FigureCanvasTkAgg.
+        # Nesta área são desenhados fundo calibrado, grafo e rota.
         main_area = ttk.Frame(self, padding=(0, 10, 10, 10))
         main_area.grid(row=0, column=1, sticky="nsew")
         main_area.columnconfigure(0, weight=1)
@@ -697,7 +709,7 @@ class DesktopNavigationApp(tk.Tk):
         self.canvas.get_tk_widget().grid(row=0, column=0, sticky="nsew")
 
     def load_campus(self):
-        """Carrega o grafo global e inicializa as listas da interface."""
+        """Carrega mapas OSM, cria o grafo global e inicializa a interface."""
 
         try:
             self.graph, self.floor_graphs = build_campus_graph()
@@ -715,7 +727,7 @@ class DesktopNavigationApp(tk.Tk):
         self.draw_map()
 
     def refresh_node_lists(self):
-        """Atualiza edifícios, pisos e pontos disponíveis nas comboboxes."""
+        """Atualiza edifícios, pisos e pontos selecionáveis nas comboboxes."""
 
         if self.graph is None:
             return
@@ -732,6 +744,7 @@ class DesktopNavigationApp(tk.Tk):
             self.destination_floor_var,
             self.destination_floor_combo,
         )
+        # Após escolher edifício e piso, só mostramos pontos desse contexto.
         origin_values = [
             item["label"]
             for item in self.named_nodes
@@ -755,7 +768,7 @@ class DesktopNavigationApp(tk.Tk):
         self.draw_map()
 
     def _refresh_building_values(self):
-        """Preenche as comboboxes de edifícios a partir dos nós selecionáveis."""
+        """Preenche as listas de edifícios a partir dos pontos selecionáveis."""
 
         buildings = sorted(
             {
@@ -774,7 +787,7 @@ class DesktopNavigationApp(tk.Tk):
                 self.destination_building_var.set(buildings[0])
 
     def _refresh_floor_combo(self, building_var, floor_var, floor_combo):
-        """Mostra apenas os pisos/áreas que existem para o edifício escolhido."""
+        """Mostra apenas pisos/áreas existentes para o edifício selecionado."""
 
         floors = sorted(
             {
@@ -790,7 +803,7 @@ class DesktopNavigationApp(tk.Tk):
             floor_var.set(floors[0])
 
     def _building_sort_key(self, building):
-        """Ordena edifícios por ordem definida em BUILDING_ORDER."""
+        """Ordena edifícios conhecidos pela ordem definida em BUILDING_ORDER."""
 
         try:
             return (BUILDING_ORDER.index(building), building)
@@ -798,7 +811,7 @@ class DesktopNavigationApp(tk.Tk):
             return (len(BUILDING_ORDER), building)
 
     def _floor_sort_key(self, floor):
-        """Ordena pisos começando pelo Exterior e depois pelos pisos interiores."""
+        """Ordena primeiro Exterior e depois os pisos interiores."""
 
         try:
             return (APP_FLOORS.index(floor), floor)
@@ -806,12 +819,7 @@ class DesktopNavigationApp(tk.Tk):
             return (len(APP_FLOORS), floor)
 
     def _collect_named_nodes(self):
-        """
-        Recolhe os nós que podem aparecer como origem/destino.
-
-        Ficam de fora corredores, pontos técnicos sem nome, e pontos exteriores
-        de deslocação como Calçada, Passadeira e Rampa.
-        """
+        """Recolhe pontos que podem aparecer como origem/destino na interface."""
 
         nodes = []
         for node_id, data in self.graph.nodes(data=True):
@@ -829,6 +837,8 @@ class DesktopNavigationApp(tk.Tk):
             if self._is_exterior_movement_point(name, floor, node_type):
                 continue
 
+            # A label mantém o nodeID quando existe, para facilitar validação
+            # cruzada com o JOSM/OSM durante testes e apresentação.
             prefix = f"{nodeid} - " if nodeid else ""
             nodes.append(
                 {
@@ -851,7 +861,7 @@ class DesktopNavigationApp(tk.Tk):
         return sorted(nodes, key=sort_key)
 
     def _is_exterior_movement_point(self, name: str, floor: str, node_type: str):
-        """Identifica pontos exteriores que existem só para deslocação no grafo."""
+        """Remove pontos exteriores usados apenas como nós intermédios do grafo."""
 
         if floor != "Exterior":
             return False
@@ -859,7 +869,7 @@ class DesktopNavigationApp(tk.Tk):
         return normalized_name in {"calçada", "calcada", "passadeira"} or normalized_name.startswith("rampa")
 
     def _selected_node(self, selected_label: str, building: str, floor: str):
-        """Converte o texto selecionado na combobox para o ID interno do grafo."""
+        """Converte o texto da combobox para o ID interno usado pelo grafo."""
 
         for item in self.named_nodes:
             if (
@@ -871,7 +881,7 @@ class DesktopNavigationApp(tk.Tk):
         return resolve_node(self.graph, selected_label)
 
     def calculate_route(self):
-        """Valida a seleção atual, calcula a rota e prepara o primeiro passo."""
+        """Valida origem/destino, calcula a rota e mostra a primeira instrução."""
 
         if self.graph is None:
             messagebox.showwarning("Sem mapa", "Carrega primeiro os mapas.")
@@ -916,6 +926,7 @@ class DesktopNavigationApp(tk.Tk):
             path=path,
             distance=distance,
         )
+        # Ao calcular, a vista muda automaticamente para onde a rota começa.
         self.visible_floor_var.set(self.graph.nodes[path[0]].get("floor_key", self.visible_floor_var.get()))
         self.status_var.set(
             f"Rota pronta: {distance:.1f} m."
@@ -936,12 +947,13 @@ class DesktopNavigationApp(tk.Tk):
 
         self.route.current_index = self._next_navigation_index()
         current = self.route.path[self.route.current_index]
+        # Se o próximo ponto estiver noutro piso, a vista acompanha a rota.
         self.visible_floor_var.set(self.graph.nodes[current].get("floor_key", self.visible_floor_var.get()))
         self._update_step_text()
         self.draw_map()
 
     def _next_navigation_index(self):
-        """Decide qual é o próximo ponto que deve ser apresentado ao utilizador."""
+        """Escolhe o próximo índice da rota a apresentar ao utilizador."""
 
         if self.route is None:
             return 0
@@ -953,8 +965,8 @@ class DesktopNavigationApp(tk.Tk):
 
         edge = self.graph[path[index]][path[index + 1]]
         if edge.get("vertical") and edge.get("edge_type") == "elevator":
-            # Um elevador pode ligar vários pisos em sequência. Para o utilizador
-            # isso deve aparecer como uma única ação: entrar e sair no piso certo.
+            # Um elevador pode atravessar vários pisos. Para o utilizador isso
+            # deve ser uma única ação: entrar e sair no piso correto.
             while index < len(path) - 1:
                 next_edge = self.graph[path[index]][path[index + 1]]
                 if not next_edge.get("vertical") or next_edge.get("edge_type") != "elevator":
@@ -965,7 +977,7 @@ class DesktopNavigationApp(tk.Tk):
         return index + 1
 
     def _update_step_text(self):
-        """Gera o texto de instrução mostrado na barra lateral."""
+        """Constrói o texto da instrução atual na barra lateral."""
 
         if self.route is None:
             return
@@ -986,6 +998,7 @@ class DesktopNavigationApp(tk.Tk):
         progress = f"Passo {index + 1} de {len(path) - 1}"
         current_text = self._navigation_point_name(current)
         if edge.get("vertical"):
+            # Ligações verticais são explicadas por ação, não por metros.
             if edge.get("edge_type") == "elevator":
                 exit_index = self._elevator_exit_index(index)
                 exit_node = path[exit_index]
@@ -1008,6 +1021,7 @@ class DesktopNavigationApp(tk.Tk):
                 )
         else:
             next_text = self._navigation_point_name(next_node)
+            # Nas arestas normais, length vem do cálculo de distância entre nós.
             self.step_var.set(
                 f"{progress}\n\n"
                 f"Local atual: {current_text}\n"
@@ -1032,7 +1046,7 @@ class DesktopNavigationApp(tk.Tk):
         return index
 
     def _node_display_name(self, node_id):
-        """Formata um nó com nodeID e piso para mensagens mais técnicas."""
+        """Formata um nó com nodeID e piso para mensagens técnicas/debug."""
 
         data = self.graph.nodes[node_id]
         name = data.get("roomname") or data.get("name") or "ponto intermédio"
@@ -1042,7 +1056,7 @@ class DesktopNavigationApp(tk.Tk):
         return f"{base} - {floor}" if floor else base
 
     def _navigation_point_name(self, node_id):
-        """Formata um nó em linguagem simples para as instruções de navegação."""
+        """Formata um nó em linguagem simples para as instruções da rota."""
 
         data = self.graph.nodes[node_id]
         name = data.get("roomname") or data.get("name") or "ponto intermédio"
@@ -1054,7 +1068,7 @@ class DesktopNavigationApp(tk.Tk):
         return f"{name} ({location})" if location else name
 
     def _edge_name(self, edge):
-        """Traduz o tipo de aresta vertical para texto apresentado ao utilizador."""
+        """Traduz o tipo de ligação vertical para texto em português."""
 
         edge_type = edge.get("edge_type", "")
         if edge_type == "elevator":
@@ -1064,7 +1078,7 @@ class DesktopNavigationApp(tk.Tk):
         return "a ligação vertical"
 
     def draw_map(self):
-        """Redesenha o mapa visível, o grafo e a rota atual."""
+        """Redesenha mapa visível, grafo, rota e marcadores de navegação."""
 
         self.figure.clear()
         route_path = self.route.path if self.route else None
@@ -1078,12 +1092,13 @@ class DesktopNavigationApp(tk.Tk):
         elif image_path and image_path.exists():
             self._draw_calibrated_image(axis, image_path)
 
+        # O grafo é desenhado depois do fundo para ficar por cima da imagem/mapa.
         self._draw_graph_axis(axis, route_path, current_index, visible_floor, image_path)
         self.figure.tight_layout()
         self.canvas.draw()
 
     def _draw_exterior_tiles(self, axis, visible_floor):
-        """Desenha o mapa exterior com tiles OpenStreetMap Carto em cache."""
+        """Desenha o exterior com tiles OpenStreetMap Carto em Web Mercator."""
 
         if self.graph is None:
             return
@@ -1108,7 +1123,7 @@ class DesktopNavigationApp(tk.Tk):
         max_tile_x, min_tile_y = web_mercator_to_tile(max_x, max_y, EXTERIOR_TILE_ZOOM)
 
         # Só são pedidos/desenhados os tiles necessários para cobrir os nós do
-        # exterior. Depois de descarregados, ficam em .tile_cache para uso offline.
+        # exterior. Depois ficam guardados em cache local.
         for tile_x in range(min_tile_x, max_tile_x + 1):
             for tile_y in range(min_tile_y, max_tile_y + 1):
                 tile_path = cached_osm_tile(tile_x, tile_y, EXTERIOR_TILE_ZOOM)
@@ -1141,13 +1156,13 @@ class DesktopNavigationApp(tk.Tk):
         )
 
     def _draw_calibrated_image(self, axis, image_path: Path):
-        """Desenha a imagem de um piso alinhada com as coordenadas dos nós OSM."""
+        """Desenha a imagem de piso alinhada com os nós através da calibração."""
 
         image = mpimg.imread(image_path)
         world_file = read_world_file(image_path)
         if world_file is not None:
-            # O world file é a calibração preferida porque já dá a transformação
-            # direta entre píxeis da imagem e coordenadas geográficas projetadas.
+            # World file é a calibração preferida porque já dá a transformação
+            # direta de píxeis da imagem para coordenadas do mapa.
             height, width = image.shape[:2]
             transform = image_pixel_to_world_from_world_file(world_file)
             axis.imshow(
@@ -1161,8 +1176,7 @@ class DesktopNavigationApp(tk.Tk):
 
         calibration = read_piclayer_calibration(image_path)
         if calibration is None:
-            # Sem calibração, a imagem é mostrada isolada. O grafo continua a
-            # existir, mas não há garantia de alinhamento visual.
+            # Sem calibração, a imagem é mostrada sem garantia de alinhamento.
             axis.imshow(image)
             axis.axis("off")
             return None
@@ -1179,7 +1193,7 @@ class DesktopNavigationApp(tk.Tk):
         return calibration, image.shape
 
     def _draw_graph_axis(self, axis, path=None, current_index=None, visible_floor=None, image_path=None):
-        """Desenha nós, arestas, labels opcionais e segmento da rota no piso atual."""
+        """Desenha nós, arestas, labels opcionais e segmentos da rota."""
 
         if self.graph is None:
             return
@@ -1190,6 +1204,8 @@ class DesktopNavigationApp(tk.Tk):
             if data.get("floor_key") == visible_floor
         ]
         floor_node_set = set(floor_nodes)
+        # O grafo é convertido para Web Mercator para ficar compatível com
+        # tiles OSM e imagens calibradas.
         pos = {
             node_id: lonlat_to_web_mercator(data["lat"], data["lon"])
             for node_id, data in self.graph.nodes(data=True)
@@ -1199,8 +1215,8 @@ class DesktopNavigationApp(tk.Tk):
         for node_a, node_b, data in self.graph.edges(data=True):
             if data.get("vertical") or node_a not in floor_node_set or node_b not in floor_node_set:
                 continue
-            # Arestas verticais pertencem à lógica de navegação, mas não são
-            # desenhadas num piso específico porque ligam mapas diferentes.
+            # Arestas verticais entram na rota, mas não são desenhadas num piso
+            # porque representam mudança entre mapas diferentes.
             x_values = [pos[node_a][0], pos[node_b][0]]
             y_values = [pos[node_a][1], pos[node_b][1]]
             axis.plot(x_values, y_values, color="#424242", linewidth=1.2, alpha=0.75, zorder=1)
@@ -1208,6 +1224,8 @@ class DesktopNavigationApp(tk.Tk):
         for node_id, (x_value, y_value) in pos.items():
             color = get_node_color(self.graph, node_id)
             size = 18
+            # A cor do nó vem da lógica base e distingue salas, corredores,
+            # escadas, elevadores e outros pontos.
             axis.scatter(
                 x_value,
                 y_value,
@@ -1219,6 +1237,7 @@ class DesktopNavigationApp(tk.Tk):
             )
 
         if self.show_labels_var.get():
+            # Labels ficam opcionais para não poluir visualmente o mapa.
             labeled_nodes = [
                 node_id
                 for node_id, data in self.graph.nodes(data=True)
@@ -1249,8 +1268,8 @@ class DesktopNavigationApp(tk.Tk):
                 node_b = path[index + 1]
                 if node_a not in floor_node_set or node_b not in floor_node_set:
                     continue
-                # Vermelho indica o caminho ainda por fazer; verde indica os
-                # segmentos já confirmados pelo utilizador.
+                # Vermelho indica caminho por fazer; verde indica caminho já
+                # confirmado pelo utilizador.
                 x_values = [pos[node_a][0], pos[node_b][0]]
                 y_values = [pos[node_a][1], pos[node_b][1]]
                 color = "#d32f2f"
@@ -1262,6 +1281,7 @@ class DesktopNavigationApp(tk.Tk):
 
             origin = path[0]
             destination = path[-1]
+            # Marcadores maiores destacam origem, destino e posição atual.
             if origin in floor_node_set:
                 axis.scatter(*pos[origin], s=120, color="#43a047", edgecolor="white", zorder=5)
             if destination in floor_node_set:
@@ -1278,12 +1298,14 @@ class DesktopNavigationApp(tk.Tk):
         axis.axis("off")
 
     def _set_map_limits(self, axis, positions, image_path):
-        """Ajusta o enquadramento para incluir grafo e imagem calibrada."""
+        """Ajusta o enquadramento para incluir nós e cantos da imagem calibrada."""
 
         points = list(positions.values())
         if image_path and image_path.exists():
             world_file = read_world_file(image_path)
             if world_file is not None:
+                # Incluir os cantos da imagem evita que o enquadramento fique
+                # apertado apenas nos nós do grafo.
                 image = mpimg.imread(image_path)
                 points.extend(world_file_corners(world_file, image.shape))
 
@@ -1301,9 +1323,12 @@ class DesktopNavigationApp(tk.Tk):
 
 
 def main():
+    """Ponto de entrada quando se executa app_desktop.py diretamente."""
+
     app = DesktopNavigationApp()
     app.mainloop()
 
 
 if __name__ == "__main__":
     main()
+
