@@ -33,6 +33,9 @@ from navegacao_campus_vscode import (
 )
 
 
+# Caminhos e constantes usados pela app desktop. A pasta BASE_DIR vem do script
+# principal e permite correr a app a partir de qualquer terminal sem caminhos
+# absolutos dependentes do computador.
 IMAGE_DIR = BASE_DIR / "Imagens ECT2"
 FLOOR_IMAGES = {
     "Piso1": IMAGE_DIR / "Piso 1.jpg",
@@ -51,6 +54,8 @@ WEB_MERCATOR_LIMIT = 20037508.342789244
 
 @dataclass
 class RouteState:
+    """Guarda a rota atual e o ponto onde o utilizador está na navegação."""
+
     graph: object
     path: list[str]
     distance: float
@@ -58,15 +63,31 @@ class RouteState:
 
 
 def floor_number(floor: str) -> int | None:
+    """Extrai o número de um piso como 'Piso3'. Devolve None para 'Exterior'."""
+
     digits = "".join(char for char in floor if char.isdigit())
     return int(digits) if digits else None
 
 
 def floor_node_id(floor: str, node_id: str) -> str:
+    """Cria um ID único no grafo global juntando piso e ID original OSM."""
+
     return f"{floor}:{node_id}"
 
 
 def vertical_edge_weight(from_node: dict, to_node: dict, edge_type: str) -> float:
+    """
+    Define o custo artificial de mudar de piso por elevador ou escadas.
+
+    Nos corredores normais, o peso da aresta vem da distância real entre dois
+    nós. Nas mudanças de piso não existe uma distância horizontal útil para
+    representar o esforço, por isso usamos um custo por piso:
+    - elevador: 8 unidades por piso, porque é mais cómodo/acessível;
+    - escadas: 12 unidades por piso, porque exige mais esforço.
+
+    Este valor entra no mesmo campo `weight` usado pelo Dijkstra/NetworkX.
+    """
+
     first_floor = int(from_node.get("floor", 0) or 0)
     second_floor = int(to_node.get("floor", 0) or 0)
     floor_delta = max(1, abs(first_floor - second_floor))
@@ -74,6 +95,14 @@ def vertical_edge_weight(from_node: dict, to_node: dict, edge_type: str) -> floa
 
 
 def build_campus_graph():
+    """
+    Junta todos os ficheiros OSM num único grafo navegável.
+
+    Cada piso/exterior é lido como grafo separado, depois os nós são copiados
+    para um grafo global com prefixo do piso. No fim são acrescentadas ligações
+    verticais e transições identificadas pelas labels dos nós OSM.
+    """
+
     campus_graph = nx.Graph()
     floor_graphs = {}
 
@@ -103,6 +132,8 @@ def build_campus_graph():
 
 
 def add_vertical_connections(campus_graph):
+    """Liga nós de elevador entre pisos adjacentes."""
+
     nodes = list(campus_graph.nodes(data=True))
 
     elevator_nodes = [
@@ -121,6 +152,8 @@ def add_vertical_connections(campus_graph):
 
 
 def exterior_transition_edge_type(data_a: dict, data_b: dict):
+    """Escolhe o tipo de aresta de transição com base nos tipos dos nós ligados."""
+
     types = {data_a.get("type"), data_b.get("type")}
     if "elevator" in types:
         return "elevator"
@@ -132,6 +165,8 @@ def exterior_transition_edge_type(data_a: dict, data_b: dict):
 
 
 def add_exterior_transition_connections(campus_graph):
+    """Procura nós com tag 'transition' e liga os que pertencem ao mesmo grupo."""
+
     transition_nodes = [
         (node_id, data)
         for node_id, data in campus_graph.nodes(data=True)
@@ -142,6 +177,8 @@ def add_exterior_transition_connections(campus_graph):
 
 
 def add_matching_transition_group_edges(campus_graph, transition_nodes):
+    """Agrupa transições pela mesma label e cria arestas entre todos os pares."""
+
     groups = {}
     for node_id, data in transition_nodes:
         for label in transition_labels(data):
@@ -159,6 +196,8 @@ def add_matching_transition_group_edges(campus_graph, transition_nodes):
 
 
 def transition_labels(data: dict):
+    """Lê uma ou mais labels de transição separadas por ponto e vírgula."""
+
     value = str(data.get("transition", "")).strip()
     if not value:
         return []
@@ -170,8 +209,13 @@ def transition_labels(data: dict):
 
 
 def add_vertical_edge(campus_graph, node_a, data_a, node_b, data_b, edge_type):
+    """Acrescenta uma aresta vertical, usada sobretudo para o elevador."""
+
     accessibility = 3 if edge_type == "elevator" else 2
     weight = vertical_edge_weight(data_a, data_b, edge_type)
+    # `weight` é o custo usado no cálculo da rota. `length` é o valor mostrado
+    # ao utilizador quando for necessário apresentar uma distância/ação.
+    # Aqui os dois ficam iguais porque a ligação vertical usa custo artificial.
     campus_graph.add_edge(
         node_a,
         node_b,
@@ -185,11 +229,18 @@ def add_vertical_edge(campus_graph, node_a, data_a, node_b, data_b, edge_type):
 
 
 def add_transition_edge(campus_graph, node_a, data_a, node_b, data_b, edge_type):
+    """Acrescenta uma ligação entre mapas/pisos baseada em tags de transição."""
+
+    # Para ligar exterior/interior, primeiro convertemos latitude/longitude para
+    # Web Mercator. Assim `math.dist` calcula uma distância aproximada em metros
+    # no mesmo sistema de coordenadas usado para desenhar os mapas.
     distance = math.dist(
         lonlat_to_web_mercator(data_a["lat"], data_a["lon"]),
         lonlat_to_web_mercator(data_b["lat"], data_b["lon"]),
     )
     accessibility = 3 if edge_type == "elevator" else 2 if edge_type == "stairs" else 4
+    # `weight` fica com a distância completa para o algoritmo; `length` é
+    # arredondado só para ser apresentado de forma mais limpa na interface.
     campus_graph.add_edge(
         node_a,
         node_b,
@@ -204,6 +255,23 @@ def add_transition_edge(campus_graph, node_a, data_a, node_b, data_b, edge_type)
 
 
 def calculate_path(graph, origin, destination, mobility_reduced=False):
+    """
+    Calcula o caminho mais curto respeitando o perfil do utilizador.
+
+    - Mobilidade reduzida: remove arestas de escadas.
+    - Perfil normal: remove arestas de elevador.
+
+    O algoritmo usado aqui é o Dijkstra através do NetworkX. Quando chamamos
+    `nx.shortest_path(..., weight="weight")`, o NetworkX procura a sequência de
+    nós cuja soma dos pesos das arestas é a menor possível. Na prática:
+    - cada corredor tem `weight` igual aos metros entre os nós OSM;
+    - cada transição exterior/interior tem `weight` aproximado em metros;
+    - escadas/elevador têm `weight` artificial para representar esforço/tempo.
+    """
+
+    # Primeiro criamos uma cópia filtrada do grafo. É mais simples remover as
+    # arestas proibidas pelo perfil do utilizador e depois correr Dijkstra sobre
+    # o grafo resultante.
     route_graph = nx.Graph()
     route_graph.add_nodes_from(graph.nodes(data=True))
     for node_a, node_b, data in graph.edges(data=True):
@@ -215,7 +283,11 @@ def calculate_path(graph, origin, destination, mobility_reduced=False):
         route_graph.add_edge(node_a, node_b, **data)
 
     try:
+        # Dijkstra devolve a lista de nós da rota. Exemplo:
+        # Exterior:1 -> Piso1:3 -> Piso1:4 -> Piso2:...
         path = nx.shortest_path(route_graph, origin, destination, weight="weight")
+        # Aqui calculamos a soma dos mesmos `weight` usados para escolher a rota.
+        # É este valor que aparece como distância total na app.
         distance = nx.shortest_path_length(route_graph, origin, destination, weight="weight")
     except (nx.NetworkXNoPath, nx.NodeNotFound):
         return None, float("inf")
@@ -224,6 +296,8 @@ def calculate_path(graph, origin, destination, mobility_reduced=False):
 
 
 def read_piclayer_calibration(image_path: Path):
+    """Lê ficheiros .cal do plugin PicLayer/JOSM, se existirem."""
+
     calibration_path = Path(str(image_path) + ".cal")
     if not calibration_path.exists():
         return None
@@ -247,6 +321,8 @@ def read_piclayer_calibration(image_path: Path):
 
 
 def world_file_path(image_path: Path):
+    """Procura o world file correspondente à imagem do piso."""
+
     candidates = [
         image_path.with_suffix(".jgw"),
         image_path.with_suffix(".pgw"),
@@ -257,6 +333,8 @@ def world_file_path(image_path: Path):
 
 
 def read_world_file(image_path: Path):
+    """Lê os seis valores de um world file (.jgw/.pgw/etc.)."""
+
     path = world_file_path(image_path)
     if path is None:
         return None
@@ -281,6 +359,8 @@ def read_world_file(image_path: Path):
 
 
 def lonlat_to_web_mercator(lat: float, lon: float):
+    """Converte latitude/longitude para Web Mercator, usado por OSM tiles."""
+
     earth_radius = 6378137
     x_value = earth_radius * math.radians(lon)
     y_value = earth_radius * math.log(math.tan(math.pi / 4 + math.radians(lat) / 2))
@@ -288,10 +368,14 @@ def lonlat_to_web_mercator(lat: float, lon: float):
 
 
 def web_mercator_tile_size(zoom: int):
+    """Calcula o tamanho, em metros Web Mercator, de um tile para o zoom dado."""
+
     return (WEB_MERCATOR_LIMIT * 2) / (2 ** zoom)
 
 
 def web_mercator_to_tile(x_value: float, y_value: float, zoom: int):
+    """Converte coordenadas Web Mercator para índice de tile OSM."""
+
     tile_size = web_mercator_tile_size(zoom)
     tile_x = math.floor((x_value + WEB_MERCATOR_LIMIT) / tile_size)
     tile_y = math.floor((WEB_MERCATOR_LIMIT - y_value) / tile_size)
@@ -303,6 +387,8 @@ def web_mercator_to_tile(x_value: float, y_value: float, zoom: int):
 
 
 def tile_web_mercator_extent(tile_x: int, tile_y: int, zoom: int):
+    """Devolve a caixa Web Mercator ocupada por um tile OSM."""
+
     tile_size = web_mercator_tile_size(zoom)
     min_x = -WEB_MERCATOR_LIMIT + tile_x * tile_size
     max_x = min_x + tile_size
@@ -312,6 +398,8 @@ def tile_web_mercator_extent(tile_x: int, tile_y: int, zoom: int):
 
 
 def cached_osm_tile(tile_x: int, tile_y: int, zoom: int):
+    """Obtém um tile OSM do cache local ou descarrega-o se ainda não existir."""
+
     tile_path = TILE_CACHE_DIR / str(zoom) / str(tile_x) / f"{tile_y}.png"
     if tile_path.exists():
         return tile_path
@@ -332,6 +420,8 @@ def cached_osm_tile(tile_x: int, tile_y: int, zoom: int):
 
 
 def image_pixel_to_world_from_world_file(world_file: dict):
+    """Cria uma transformação Matplotlib a partir dos valores do world file."""
+
     return Affine2D().from_values(
         world_file["a"],
         world_file["d"],
@@ -343,6 +433,8 @@ def image_pixel_to_world_from_world_file(world_file: dict):
 
 
 def image_pixel_to_world_transform(calibration: dict, image_shape):
+    """Cria a transformação da imagem usando a calibração PicLayer."""
+
     height, width = image_shape[:2]
     scale = (calibration.get("INITIAL_SCALE", 100.0) or 100.0) / 100.0
     m00 = calibration["M00"] * scale
@@ -374,6 +466,8 @@ def image_pixel_to_world_transform(calibration: dict, image_shape):
 
 
 def pixel_to_world(calibration: dict, image_shape, pixel_x: float, pixel_y: float):
+    """Converte um ponto da imagem em coordenadas do mundo pela calibração .cal."""
+
     height, width = image_shape[:2]
     scale = (calibration.get("INITIAL_SCALE", 100.0) or 100.0) / 100.0
     m00 = calibration["M00"] * scale
@@ -400,6 +494,8 @@ def pixel_to_world(calibration: dict, image_shape, pixel_x: float, pixel_y: floa
 
 
 def image_world_corners(calibration: dict, image_shape):
+    """Calcula os quatro cantos da imagem já transformados para o mundo."""
+
     height, width = image_shape[:2]
     return [
         pixel_to_world(calibration, image_shape, 0, 0),
@@ -410,6 +506,8 @@ def image_world_corners(calibration: dict, image_shape):
 
 
 def world_file_corners(world_file: dict, image_shape):
+    """Calcula os quatro cantos da imagem usando um world file."""
+
     height, width = image_shape[:2]
 
     def transform(pixel_x, pixel_y):
@@ -427,6 +525,8 @@ def world_file_corners(world_file: dict, image_shape):
 
 
 class DesktopNavigationApp(tk.Tk):
+    """Janela principal Tkinter da aplicação desktop."""
+
     def __init__(self):
         super().__init__()
         self.title("Navegação Pedestre Indoor - UTAD")
@@ -438,6 +538,9 @@ class DesktopNavigationApp(tk.Tk):
         self.named_nodes: list[dict[str, str]] = []
         self.route: RouteState | None = None
 
+        # Variáveis Tkinter que ficam ligadas aos controlos da interface.
+        # Quando o utilizador escolhe valores nas comboboxes, estas variáveis
+        # são atualizadas automaticamente.
         self.profile_var = tk.StringVar(value="normal")
         self.origin_building_var = tk.StringVar(value="ECT2")
         self.destination_building_var = tk.StringVar(value="ECT2")
@@ -454,6 +557,8 @@ class DesktopNavigationApp(tk.Tk):
         self.load_campus()
 
     def _build_layout(self):
+        """Constrói a interface: barra lateral de controlos e área do mapa."""
+
         self.columnconfigure(1, weight=1)
         self.rowconfigure(0, weight=1)
 
@@ -592,6 +697,8 @@ class DesktopNavigationApp(tk.Tk):
         self.canvas.get_tk_widget().grid(row=0, column=0, sticky="nsew")
 
     def load_campus(self):
+        """Carrega o grafo global e inicializa as listas da interface."""
+
         try:
             self.graph, self.floor_graphs = build_campus_graph()
         except Exception as error:
@@ -608,6 +715,8 @@ class DesktopNavigationApp(tk.Tk):
         self.draw_map()
 
     def refresh_node_lists(self):
+        """Atualiza edifícios, pisos e pontos disponíveis nas comboboxes."""
+
         if self.graph is None:
             return
 
@@ -646,6 +755,8 @@ class DesktopNavigationApp(tk.Tk):
         self.draw_map()
 
     def _refresh_building_values(self):
+        """Preenche as comboboxes de edifícios a partir dos nós selecionáveis."""
+
         buildings = sorted(
             {
                 item["building"]
@@ -663,6 +774,8 @@ class DesktopNavigationApp(tk.Tk):
                 self.destination_building_var.set(buildings[0])
 
     def _refresh_floor_combo(self, building_var, floor_var, floor_combo):
+        """Mostra apenas os pisos/áreas que existem para o edifício escolhido."""
+
         floors = sorted(
             {
                 item["floor"]
@@ -677,18 +790,29 @@ class DesktopNavigationApp(tk.Tk):
             floor_var.set(floors[0])
 
     def _building_sort_key(self, building):
+        """Ordena edifícios por ordem definida em BUILDING_ORDER."""
+
         try:
             return (BUILDING_ORDER.index(building), building)
         except ValueError:
             return (len(BUILDING_ORDER), building)
 
     def _floor_sort_key(self, floor):
+        """Ordena pisos começando pelo Exterior e depois pelos pisos interiores."""
+
         try:
             return (APP_FLOORS.index(floor), floor)
         except ValueError:
             return (len(APP_FLOORS), floor)
 
     def _collect_named_nodes(self):
+        """
+        Recolhe os nós que podem aparecer como origem/destino.
+
+        Ficam de fora corredores, pontos técnicos sem nome, e pontos exteriores
+        de deslocação como Calçada, Passadeira e Rampa.
+        """
+
         nodes = []
         for node_id, data in self.graph.nodes(data=True):
             name = data.get("roomname") or data.get("name")
@@ -727,12 +851,16 @@ class DesktopNavigationApp(tk.Tk):
         return sorted(nodes, key=sort_key)
 
     def _is_exterior_movement_point(self, name: str, floor: str, node_type: str):
+        """Identifica pontos exteriores que existem só para deslocação no grafo."""
+
         if floor != "Exterior":
             return False
         normalized_name = name.strip().lower()
         return normalized_name in {"calçada", "calcada", "passadeira"} or normalized_name.startswith("rampa")
 
     def _selected_node(self, selected_label: str, building: str, floor: str):
+        """Converte o texto selecionado na combobox para o ID interno do grafo."""
+
         for item in self.named_nodes:
             if (
                 item["label"] == selected_label
@@ -743,10 +871,14 @@ class DesktopNavigationApp(tk.Tk):
         return resolve_node(self.graph, selected_label)
 
     def calculate_route(self):
+        """Valida a seleção atual, calcula a rota e prepara o primeiro passo."""
+
         if self.graph is None:
             messagebox.showwarning("Sem mapa", "Carrega primeiro os mapas.")
             return
 
+        # As comboboxes mostram texto legível; aqui voltamos ao ID interno
+        # usado pelo NetworkX para calcular caminhos.
         origin = self._selected_node(
             self.origin_var.get(),
             self.origin_building_var.get(),
@@ -792,6 +924,8 @@ class DesktopNavigationApp(tk.Tk):
         self.draw_map()
 
     def confirm_next_step(self):
+        """Avança a navegação quando o utilizador confirma que chegou ao ponto."""
+
         if self.route is None:
             messagebox.showinfo("Sem rota", "Calcula primeiro uma rota.")
             return
@@ -807,6 +941,8 @@ class DesktopNavigationApp(tk.Tk):
         self.draw_map()
 
     def _next_navigation_index(self):
+        """Decide qual é o próximo ponto que deve ser apresentado ao utilizador."""
+
         if self.route is None:
             return 0
 
@@ -817,6 +953,8 @@ class DesktopNavigationApp(tk.Tk):
 
         edge = self.graph[path[index]][path[index + 1]]
         if edge.get("vertical") and edge.get("edge_type") == "elevator":
+            # Um elevador pode ligar vários pisos em sequência. Para o utilizador
+            # isso deve aparecer como uma única ação: entrar e sair no piso certo.
             while index < len(path) - 1:
                 next_edge = self.graph[path[index]][path[index + 1]]
                 if not next_edge.get("vertical") or next_edge.get("edge_type") != "elevator":
@@ -827,6 +965,8 @@ class DesktopNavigationApp(tk.Tk):
         return index + 1
 
     def _update_step_text(self):
+        """Gera o texto de instrução mostrado na barra lateral."""
+
         if self.route is None:
             return
 
@@ -877,6 +1017,8 @@ class DesktopNavigationApp(tk.Tk):
             )
 
     def _elevator_exit_index(self, start_index):
+        """Encontra o nó onde termina uma sequência contínua de elevador."""
+
         if self.route is None:
             return start_index
 
@@ -890,6 +1032,8 @@ class DesktopNavigationApp(tk.Tk):
         return index
 
     def _node_display_name(self, node_id):
+        """Formata um nó com nodeID e piso para mensagens mais técnicas."""
+
         data = self.graph.nodes[node_id]
         name = data.get("roomname") or data.get("name") or "ponto intermédio"
         nodeid = data.get("nodeid")
@@ -898,6 +1042,8 @@ class DesktopNavigationApp(tk.Tk):
         return f"{base} - {floor}" if floor else base
 
     def _navigation_point_name(self, node_id):
+        """Formata um nó em linguagem simples para as instruções de navegação."""
+
         data = self.graph.nodes[node_id]
         name = data.get("roomname") or data.get("name") or "ponto intermédio"
         if data.get("type") == "connection":
@@ -908,6 +1054,8 @@ class DesktopNavigationApp(tk.Tk):
         return f"{name} ({location})" if location else name
 
     def _edge_name(self, edge):
+        """Traduz o tipo de aresta vertical para texto apresentado ao utilizador."""
+
         edge_type = edge.get("edge_type", "")
         if edge_type == "elevator":
             return "o elevador"
@@ -916,6 +1064,8 @@ class DesktopNavigationApp(tk.Tk):
         return "a ligação vertical"
 
     def draw_map(self):
+        """Redesenha o mapa visível, o grafo e a rota atual."""
+
         self.figure.clear()
         route_path = self.route.path if self.route else None
         current_index = self.route.current_index if self.route else None
@@ -933,6 +1083,8 @@ class DesktopNavigationApp(tk.Tk):
         self.canvas.draw()
 
     def _draw_exterior_tiles(self, axis, visible_floor):
+        """Desenha o mapa exterior com tiles OpenStreetMap Carto em cache."""
+
         if self.graph is None:
             return
 
@@ -955,6 +1107,8 @@ class DesktopNavigationApp(tk.Tk):
         min_tile_x, max_tile_y = web_mercator_to_tile(min_x, min_y, EXTERIOR_TILE_ZOOM)
         max_tile_x, min_tile_y = web_mercator_to_tile(max_x, max_y, EXTERIOR_TILE_ZOOM)
 
+        # Só são pedidos/desenhados os tiles necessários para cobrir os nós do
+        # exterior. Depois de descarregados, ficam em .tile_cache para uso offline.
         for tile_x in range(min_tile_x, max_tile_x + 1):
             for tile_y in range(min_tile_y, max_tile_y + 1):
                 tile_path = cached_osm_tile(tile_x, tile_y, EXTERIOR_TILE_ZOOM)
@@ -987,9 +1141,13 @@ class DesktopNavigationApp(tk.Tk):
         )
 
     def _draw_calibrated_image(self, axis, image_path: Path):
+        """Desenha a imagem de um piso alinhada com as coordenadas dos nós OSM."""
+
         image = mpimg.imread(image_path)
         world_file = read_world_file(image_path)
         if world_file is not None:
+            # O world file é a calibração preferida porque já dá a transformação
+            # direta entre píxeis da imagem e coordenadas geográficas projetadas.
             height, width = image.shape[:2]
             transform = image_pixel_to_world_from_world_file(world_file)
             axis.imshow(
@@ -1003,6 +1161,8 @@ class DesktopNavigationApp(tk.Tk):
 
         calibration = read_piclayer_calibration(image_path)
         if calibration is None:
+            # Sem calibração, a imagem é mostrada isolada. O grafo continua a
+            # existir, mas não há garantia de alinhamento visual.
             axis.imshow(image)
             axis.axis("off")
             return None
@@ -1019,6 +1179,8 @@ class DesktopNavigationApp(tk.Tk):
         return calibration, image.shape
 
     def _draw_graph_axis(self, axis, path=None, current_index=None, visible_floor=None, image_path=None):
+        """Desenha nós, arestas, labels opcionais e segmento da rota no piso atual."""
+
         if self.graph is None:
             return
 
@@ -1037,6 +1199,8 @@ class DesktopNavigationApp(tk.Tk):
         for node_a, node_b, data in self.graph.edges(data=True):
             if data.get("vertical") or node_a not in floor_node_set or node_b not in floor_node_set:
                 continue
+            # Arestas verticais pertencem à lógica de navegação, mas não são
+            # desenhadas num piso específico porque ligam mapas diferentes.
             x_values = [pos[node_a][0], pos[node_b][0]]
             y_values = [pos[node_a][1], pos[node_b][1]]
             axis.plot(x_values, y_values, color="#424242", linewidth=1.2, alpha=0.75, zorder=1)
@@ -1085,6 +1249,8 @@ class DesktopNavigationApp(tk.Tk):
                 node_b = path[index + 1]
                 if node_a not in floor_node_set or node_b not in floor_node_set:
                     continue
+                # Vermelho indica o caminho ainda por fazer; verde indica os
+                # segmentos já confirmados pelo utilizador.
                 x_values = [pos[node_a][0], pos[node_b][0]]
                 y_values = [pos[node_a][1], pos[node_b][1]]
                 color = "#d32f2f"
@@ -1112,6 +1278,8 @@ class DesktopNavigationApp(tk.Tk):
         axis.axis("off")
 
     def _set_map_limits(self, axis, positions, image_path):
+        """Ajusta o enquadramento para incluir grafo e imagem calibrada."""
+
         points = list(positions.values())
         if image_path and image_path.exists():
             world_file = read_world_file(image_path)

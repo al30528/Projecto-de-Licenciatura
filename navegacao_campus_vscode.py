@@ -200,9 +200,16 @@ def build_graph(nodes, edges):
             **data["tags"],
         )
 
-    # Adicionar arestas com peso = distância
+    # Adicionar arestas com peso = distância.
+    # Cada "way" do OSM liga dois ou mais nós. Para cada par de nós consecutivos,
+    # calculamos a distância geográfica entre latitude/longitude e guardamos essa
+    # distância no atributo `weight`. É este `weight` que o Dijkstra soma para
+    # decidir qual é o caminho mais curto.
     for n1, n2, way_id, way_tags in edges:
         if n1 in nodes and n2 in nodes:
+            # Haversine calcula a distância aproximada em metros sobre a Terra.
+            # Para corredores e caminhos exteriores curtos, esta aproximação é
+            # suficientemente boa para apresentar metros e comparar rotas.
             dist = haversine(
                 nodes[n1]["lat"],
                 nodes[n1]["lon"],
@@ -221,7 +228,10 @@ def build_graph(nodes, edges):
             graph.add_edge(
                 n1,
                 n2,
+                # `weight` é usado pelo algoritmo de caminho mais curto.
                 weight=dist,
+                # `length` é a mesma distância, mas arredondada para mostrar ao
+                # utilizador nas instruções e nos resumos.
                 length=round(dist, 2),
                 way_id=way_id,
                 edge_type=edge_type,
@@ -243,6 +253,11 @@ def dijkstra(graph, start, end, accessibility_min=1):
         1 = aceita tudo;
         2 = evita caminhos que tenham accessibility 1;
         3 = exige caminhos mais acessíveis, se existirem no OSM.
+
+    Esta função mostra explicitamente o que o NetworkX faz por baixo na app
+    desktop: começa com distância infinita para todos os nós, mete a origem a
+    zero, e vai sempre expandindo o nó ainda não visitado com menor distância
+    acumulada.
     """
     if start not in graph.nodes:
         print(f"ERRO: Nó de origem '{start}' não existe no grafo.")
@@ -252,13 +267,22 @@ def dijkstra(graph, start, end, accessibility_min=1):
         print(f"ERRO: Nó de destino '{end}' não existe no grafo.")
         return None, float("inf")
 
+    # Melhor distância conhecida desde a origem até cada nó.
+    # No início só conhecemos a origem, por isso todos os outros ficam a infinito.
     distances = {node: float("inf") for node in graph.nodes}
     distances[start] = 0
+
+    # Guarda o nó anterior no melhor caminho encontrado até cada nó.
+    # No fim permite reconstruir a rota de trás para a frente.
     previous = {node: None for node in graph.nodes}
+
+    # Fila de prioridade: o heap garante que retiramos sempre o nó com menor
+    # distância acumulada. Cada item é (distância_atual, node_id).
     priority_queue = [(0, start)]
     visited = set()
 
     while priority_queue:
+        # Retira o nó mais promissor: aquele que, até agora, tem menor custo.
         current_dist, current_node = heapq.heappop(priority_queue)
 
         if current_node in visited:
@@ -278,10 +302,15 @@ def dijkstra(graph, start, end, accessibility_min=1):
             if edge_data.get("accessibility", 1) < accessibility_min:
                 continue
 
+            # Peso da aresta entre o nó atual e o vizinho.
+            # Normalmente é a distância em metros; nalgumas ligações especiais
+            # pode ser um custo artificial, como escadas/elevador na app desktop.
             weight = edge_data["weight"]
             new_dist = current_dist + weight
 
             if new_dist < distances[neighbor]:
+                # Se chegar ao vizinho por este caminho for melhor do que o que
+                # conhecíamos antes, guardamos a nova distância e o nó anterior.
                 distances[neighbor] = new_dist
                 previous[neighbor] = current_node
                 heapq.heappush(priority_queue, (new_dist, neighbor))
@@ -290,6 +319,8 @@ def dijkstra(graph, start, end, accessibility_min=1):
         print("Não foi possível encontrar um caminho.")
         return None, float("inf")
 
+    # Reconstrução da rota: começamos no destino e vamos seguindo `previous`
+    # até à origem. Depois invertemos a lista para ficar origem -> destino.
     path = []
     node = end
     while node is not None:
