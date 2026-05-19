@@ -1,0 +1,1059 @@
+# -*- coding: utf-8 -*-
+"""Protótipo Android em Kivy para navegação pedestre indoor na UTAD."""
+
+from __future__ import annotations
+
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+from kivy.app import App
+from kivy.clock import Clock
+from kivy.core.image import Image as CoreImage
+from kivy.core.text import Label as CoreLabel
+from kivy.graphics import Color, Ellipse, Line, Mesh, Rectangle
+from kivy.metrics import dp, sp
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.button import Button
+from kivy.uix.checkbox import CheckBox
+from kivy.uix.gridlayout import GridLayout
+from kivy.uix.label import Label
+from kivy.uix.scrollview import ScrollView
+from kivy.uix.screenmanager import Screen, ScreenManager
+from kivy.uix.spinner import Spinner
+from kivy.uix.widget import Widget
+from kivy.utils import get_color_from_hex
+
+import navigation_core as nav
+
+
+class Surface(BoxLayout):
+    """Painel simples com fundo sólido para separar texto e controlos do mapa."""
+
+    def __init__(self, background="#F7F8FA", **kwargs):
+        super().__init__(**kwargs)
+        self._background = get_color_from_hex(background)
+        with self.canvas.before:
+            Color(*self._background)
+            self._background_rect = Rectangle(pos=self.pos, size=self.size)
+        self.bind(pos=self._update_background, size=self._update_background)
+
+    def _update_background(self, *_args):
+        self._background_rect.pos = self.pos
+        self._background_rect.size = self.size
+
+
+class GraphMapWidget(Widget):
+    """Canvas simples para ver o grafo e a rota no ecrã móvel."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.graph = None
+        self.route = None
+        self.visible_floor = "Exterior"
+        self.show_labels = False
+        self._texture_cache = {}
+        self.tile_cache_dir = nav.BASE_DIR / ".tile_cache" / "osm_carto_android"
+        self.bind(pos=self._on_geometry_change, size=self._on_geometry_change)
+
+    def _on_geometry_change(self, *_args):
+        self.redraw()
+
+    def set_state(self, graph, visible_floor, route=None, show_labels=False):
+        self.graph = graph
+        self.visible_floor = visible_floor
+        self.route = route
+        self.show_labels = show_labels
+        self.redraw()
+
+    def redraw(self):
+        self.canvas.clear()
+        with self.canvas:
+            Color(0.96, 0.97, 0.98, 1)
+            Rectangle(pos=self.pos, size=self.size)
+
+        if self.graph is None or not self.visible_floor:
+            self._draw_center_text("Mapa ainda não carregado.")
+            return
+
+        floor_nodes = [
+            node_id
+            for node_id, data in self.graph.nodes(data=True)
+            if data.get("floor_key") == self.visible_floor
+        ]
+        if not floor_nodes:
+            self._draw_center_text("Sem dados para este piso.")
+            return
+
+        floor_node_set = set(floor_nodes)
+        positions = {
+            node_id: nav.lonlat_to_web_mercator(data["lat"], data["lon"])
+            for node_id, data in self.graph.nodes(data=True)
+            if node_id in floor_node_set
+        }
+        image_path, image_corners = self._floor_image_corners()
+        tile_extents = self._exterior_tile_extents(positions)
+        tile_points = self._extent_points(tile_extents)
+        points = list(positions.values()) + image_corners + tile_points
+        world_to_screen = self._world_to_screen_factory(points)
+        if world_to_screen is None:
+            return
+
+        with self.canvas:
+            if self.visible_floor == "Exterior":
+                self._draw_osm_tiles(tile_extents, world_to_screen)
+
+            if image_path and image_corners:
+                self._draw_floor_image(image_path, image_corners, world_to_screen)
+
+            self._draw_edges(floor_node_set, positions, world_to_screen)
+            self._draw_route(floor_node_set, positions, world_to_screen)
+            self._draw_nodes(positions, world_to_screen)
+
+        if self.show_labels:
+            self._draw_labels(floor_node_set, positions, world_to_screen)
+        if self.visible_floor == "Exterior":
+            self._draw_osm_attribution()
+    def _floor_image_corners(self):
+        image_path = nav.FLOOR_IMAGES.get(self.visible_floor)
+        if not image_path or not image_path.exists():
+            return None, []
+
+        texture = self._texture_for(image_path)
+        world_file = nav.read_world_file(image_path)
+        if texture is None or world_file is None:
+            return None, []
+
+        return image_path, nav.world_file_corners(world_file, texture.size)
+
+    def _texture_for(self, image_path):
+        key = str(image_path)
+        if key not in self._texture_cache:
+            try:
+                self._texture_cache[key] = CoreImage(key).texture
+            except Exception:
+                self._texture_cache[key] = None
+        return self._texture_cache[key]
+
+    def _world_to_screen_factory(self, points):
+        if not points:
+            return None
+
+        x_values = [point[0] for point in points]
+        y_values = [point[1] for point in points]
+        min_x, max_x = min(x_values), max(x_values)
+        min_y, max_y = min(y_values), max(y_values)
+        range_x = max(max_x - min_x, 1)
+        range_y = max(max_y - min_y, 1)
+        margin = dp(18)
+        usable_width = max(self.width - margin * 2, 1)
+        usable_height = max(self.height - margin * 2, 1)
+        scale = min(usable_width / range_x, usable_height / range_y)
+        offset_x = self.x + (self.width - range_x * scale) / 2 - min_x * scale
+        offset_y = self.y + (self.height - range_y * scale) / 2 - min_y * scale
+
+        def world_to_screen(point):
+            return offset_x + point[0] * scale, offset_y + point[1] * scale
+
+        return world_to_screen
+
+    def _draw_floor_image(self, image_path, corners, world_to_screen):
+        texture = self._texture_for(image_path)
+        if texture is None:
+            return
+
+        screen_corners = [world_to_screen(point) for point in corners]
+        tex_coords = [(0, 1), (1, 1), (1, 0), (0, 0)]
+        vertices = []
+        for point, tex_coord in zip(screen_corners, tex_coords):
+            vertices.extend([point[0], point[1], tex_coord[0], tex_coord[1]])
+
+        Color(1, 1, 1, 1)
+        Mesh(
+            vertices=vertices,
+            indices=[0, 1, 2, 2, 3, 0],
+            mode="triangles",
+            texture=texture,
+        )
+
+    def _exterior_tile_extents(self, positions):
+        if self.visible_floor != "Exterior" or not positions:
+            return []
+
+        x_values = [point[0] for point in positions.values()]
+        y_values = [point[1] for point in positions.values()]
+        margin = 90
+        min_x = min(x_values) - margin
+        max_x = max(x_values) + margin
+        min_y = min(y_values) - margin
+        max_y = max(y_values) + margin
+
+        min_tile_x, max_tile_y = nav.web_mercator_to_tile(min_x, min_y, nav.EXTERIOR_TILE_ZOOM)
+        max_tile_x, min_tile_y = nav.web_mercator_to_tile(max_x, max_y, nav.EXTERIOR_TILE_ZOOM)
+
+        extents = []
+        for tile_x in range(min_tile_x, max_tile_x + 1):
+            for tile_y in range(min_tile_y, max_tile_y + 1):
+                extents.append(
+                    (
+                        tile_x,
+                        tile_y,
+                        nav.tile_web_mercator_extent(tile_x, tile_y, nav.EXTERIOR_TILE_ZOOM),
+                    )
+                )
+        return extents
+
+    def _extent_points(self, tile_extents):
+        points = []
+        for _tile_x, _tile_y, extent in tile_extents:
+            min_x, max_x, min_y, max_y = extent
+            points.extend([(min_x, min_y), (max_x, max_y)])
+        return points
+
+    def _draw_osm_tiles(self, tile_extents, world_to_screen):
+        for tile_x, tile_y, extent in tile_extents:
+            tile_path = self._cached_osm_tile(tile_x, tile_y, nav.EXTERIOR_TILE_ZOOM)
+            if tile_path is None:
+                continue
+
+            texture = self._texture_for(tile_path)
+            if texture is None:
+                continue
+
+            min_x, max_x, min_y, max_y = extent
+            left, bottom = world_to_screen((min_x, min_y))
+            right, top = world_to_screen((max_x, max_y))
+            Color(1, 1, 1, 1)
+            Rectangle(
+                texture=texture,
+                pos=(left, bottom),
+                size=(right - left, top - bottom),
+            )
+
+    def _cached_osm_tile(self, tile_x: int, tile_y: int, zoom: int):
+        tile_path = self.tile_cache_dir / str(zoom) / str(tile_x) / f"{tile_y}.png"
+        if tile_path.exists():
+            return tile_path
+
+        tile_path.parent.mkdir(parents=True, exist_ok=True)
+        url = nav.OSM_TILE_URL.format(z=zoom, x=tile_x, y=tile_y)
+        request = urllib.request.Request(
+            url,
+            headers={"User-Agent": nav.OSM_TILE_USER_AGENT},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=8) as response:
+                tile_path.write_bytes(response.read())
+        except (urllib.error.URLError, TimeoutError, OSError):
+            return None
+
+        return tile_path
+
+    def _draw_edges(self, floor_node_set, positions, world_to_screen):
+        Color(0.18, 0.19, 0.20, 0.65)
+        for node_a, node_b, data in self.graph.edges(data=True):
+            if data.get("vertical") or node_a not in floor_node_set or node_b not in floor_node_set:
+                continue
+            x1, y1 = world_to_screen(positions[node_a])
+            x2, y2 = world_to_screen(positions[node_b])
+            Line(points=[x1, y1, x2, y2], width=dp(1.1))
+
+    def _draw_route(self, floor_node_set, positions, world_to_screen):
+        if self.route is None or len(self.route.path) < 2:
+            return
+
+        for index in range(len(self.route.path) - 1):
+            node_a = self.route.path[index]
+            node_b = self.route.path[index + 1]
+            if node_a not in floor_node_set or node_b not in floor_node_set:
+                continue
+
+            color = "#43A047" if index < self.route.current_index else "#D32F2F"
+            Color(*get_color_from_hex(color))
+            x1, y1 = world_to_screen(positions[node_a])
+            x2, y2 = world_to_screen(positions[node_b])
+            Line(points=[x1, y1, x2, y2], width=dp(3.2))
+
+        origin = self.route.path[0]
+        destination = self.route.path[-1]
+        if origin in floor_node_set:
+            self._draw_marker(world_to_screen(positions[origin]), "#43A047", dp(9))
+        if destination in floor_node_set:
+            self._draw_marker(world_to_screen(positions[destination]), "#1E88E5", dp(9))
+        current = self.route.path[self.route.current_index]
+        if current in floor_node_set:
+            self._draw_marker(world_to_screen(positions[current]), "#FBC02D", dp(11))
+
+    def _draw_nodes(self, positions, world_to_screen):
+        for node_id, point in positions.items():
+            self._draw_marker(
+                world_to_screen(point),
+                nav.node_color(self.graph, node_id),
+                dp(4.5),
+            )
+
+    def _draw_marker(self, point, color, radius):
+        Color(*get_color_from_hex(color))
+        Ellipse(pos=(point[0] - radius, point[1] - radius), size=(radius * 2, radius * 2))
+        Color(1, 1, 1, 0.85)
+        Line(circle=(point[0], point[1], radius), width=dp(0.8))
+
+    def _draw_labels(self, floor_node_set, positions, world_to_screen):
+        for node_id, point in positions.items():
+            if node_id not in floor_node_set:
+                continue
+            data = self.graph.nodes[node_id]
+            if not (data.get("roomname") or data.get("name")):
+                continue
+            x_value, y_value = world_to_screen(point)
+            self._draw_text(nav.node_label(self.graph, node_id, show_nodeid=True), x_value, y_value + dp(8))
+
+    def _draw_center_text(self, text):
+        self._draw_text(text, self.center_x, self.center_y)
+
+    def _draw_text(self, text, x_value, y_value):
+        label = CoreLabel(text=text, font_size=sp(11), color=(0.04, 0.04, 0.04, 1))
+        label.refresh()
+        texture = label.texture
+        width, height = texture.size
+        with self.canvas:
+            Color(1, 1, 1, 0.76)
+            Rectangle(
+                pos=(x_value - width / 2 - dp(3), y_value - dp(2)),
+                size=(width + dp(6), height + dp(4)),
+            )
+            Color(1, 1, 1, 1)
+            Rectangle(
+                texture=texture,
+                pos=(x_value - width / 2, y_value),
+                size=texture.size,
+            )
+
+    def _draw_osm_attribution(self):
+        label = CoreLabel(
+            text="© OpenStreetMap contributors",
+            font_size=sp(10),
+            color=(0.04, 0.04, 0.04, 1),
+        )
+        label.refresh()
+        texture = label.texture
+        padding = dp(5)
+        x_value = self.right - texture.size[0] - padding * 2
+        y_value = self.y + padding
+        with self.canvas:
+            Color(1, 1, 1, 0.78)
+            Rectangle(
+                pos=(x_value - padding, y_value - padding / 2),
+                size=(texture.size[0] + padding * 2, texture.size[1] + padding),
+            )
+            Color(1, 1, 1, 1)
+            Rectangle(texture=texture, pos=(x_value, y_value), size=texture.size)
+
+
+class _LegacyAndroidNavigationApp(App):
+    title = "Navegação UTAD"
+
+    def build(self):
+        self.graph = None
+        self.floor_graphs = {}
+        self.selectable_nodes = []
+        self.route = None
+        self._refreshing_options = False
+
+        root = BoxLayout(orientation="vertical", spacing=dp(8), padding=dp(8))
+
+        title = Label(
+            text="Navegação Pedestre UTAD",
+            bold=True,
+            font_size=sp(20),
+            size_hint_y=None,
+            height=dp(34),
+        )
+        root.add_widget(title)
+
+        root.add_widget(self._build_controls())
+
+        self.map_widget = GraphMapWidget(size_hint_y=1)
+        self.map_widget.tile_cache_dir = Path(self.user_data_dir) / "osm_carto_tiles"
+        root.add_widget(self.map_widget)
+
+        instruction_panel = Surface(
+            orientation="vertical",
+            background="#F7F8FA",
+            size_hint_y=None,
+            height=dp(150),
+            padding=dp(10),
+        )
+        self.navigation_label = Label(
+            text="A carregar mapas...",
+            color=get_color_from_hex("#111111"),
+            halign="left",
+            valign="top",
+            size_hint_y=None,
+            height=dp(132),
+        )
+        self.navigation_label.bind(
+            size=lambda instance, value: setattr(instance, "text_size", value),
+        )
+        instruction_panel.add_widget(self.navigation_label)
+        root.add_widget(instruction_panel)
+
+        buttons = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(8))
+        buttons.add_widget(Button(text="Calcular rota", on_release=lambda *_: self.calculate_route()))
+        buttons.add_widget(Button(text="Confirmar chegada", on_release=lambda *_: self.confirm_arrival()))
+        root.add_widget(buttons)
+
+        Clock.schedule_once(lambda *_: self.load_campus(), 0)
+        return root
+
+    def _build_controls(self):
+        scroll = ScrollView(size_hint_y=None, height=dp(284), do_scroll_x=False)
+        grid = GridLayout(cols=2, spacing=dp(6), size_hint_y=None)
+        grid.bind(minimum_height=grid.setter("height"))
+        scroll.add_widget(grid)
+
+        self.profile_spinner = self._add_spinner(
+            grid,
+            "Perfil",
+            ["Normal", "Mobilidade reduzida"],
+            "Normal",
+        )
+        self.origin_building_spinner = self._add_spinner(grid, "Edifício origem", [], "")
+        self.origin_floor_spinner = self._add_spinner(grid, "Piso origem", [], "")
+        self.origin_spinner = self._add_spinner(grid, "Origem", [], "")
+        self.destination_building_spinner = self._add_spinner(grid, "Edifício destino", [], "")
+        self.destination_floor_spinner = self._add_spinner(grid, "Piso destino", [], "")
+        self.destination_spinner = self._add_spinner(grid, "Destino", [], "")
+        self.visible_floor_spinner = self._add_spinner(grid, "Mapa visível", nav.APP_FLOORS, "Exterior")
+
+        grid.add_widget(Label(text="Mostrar labels", halign="left", size_hint_y=None, height=dp(38)))
+        self.show_labels_checkbox = CheckBox(size_hint_y=None, height=dp(38))
+        grid.add_widget(self.show_labels_checkbox)
+
+        for spinner in [
+            self.origin_building_spinner,
+            self.origin_floor_spinner,
+            self.origin_spinner,
+            self.destination_building_spinner,
+            self.destination_floor_spinner,
+            self.destination_spinner,
+            self.visible_floor_spinner,
+        ]:
+            spinner.bind(text=lambda *_: self.on_selection_changed())
+        self.show_labels_checkbox.bind(active=lambda *_: self.refresh_map())
+
+        return scroll
+
+    def _add_spinner(self, parent, label_text, values, text):
+        parent.add_widget(Label(text=label_text, halign="left", size_hint_y=None, height=dp(38)))
+        spinner = Spinner(
+            text=text or "-",
+            values=values,
+            size_hint_y=None,
+            height=dp(38),
+        )
+        parent.add_widget(spinner)
+        return spinner
+
+    def _fit_label_height(self, instance, texture_size):
+        instance.height = max(dp(112), texture_size[1] + dp(18))
+
+    def load_campus(self):
+        try:
+            self.graph, self.floor_graphs = nav.build_campus_graph()
+            self.selectable_nodes = nav.collect_selectable_nodes(self.graph)
+        except Exception as error:
+            self.navigation_label.text = f"Erro ao carregar mapas:\n{error}"
+            return
+
+        self.route = None
+        self.refresh_option_lists(force_defaults=True)
+        self.navigation_label.text = "Escolhe a origem e o destino para começar."
+        self.refresh_map()
+
+    def on_selection_changed(self):
+        if self._refreshing_options:
+            return
+        if not self.selectable_nodes:
+            return
+        self.refresh_option_lists(force_defaults=False)
+        if self.route is None and self.origin_floor_spinner.text in nav.APP_FLOORS:
+            self._set_spinner_text_silently(self.visible_floor_spinner, self.origin_floor_spinner.text)
+        self.refresh_map()
+
+    def refresh_option_lists(self, force_defaults=False):
+        self._refreshing_options = True
+        try:
+            buildings = nav.available_buildings(self.selectable_nodes)
+            self._set_spinner_values(
+                self.origin_building_spinner,
+                buildings,
+                "ECT2" if "ECT2" in buildings else None,
+                force_defaults,
+            )
+            self._set_spinner_values(
+                self.destination_building_spinner,
+                buildings,
+                "ECT2" if "ECT2" in buildings else None,
+                force_defaults,
+            )
+
+            self._refresh_floor_spinner(self.origin_building_spinner, self.origin_floor_spinner, force_defaults)
+            self._refresh_floor_spinner(
+                self.destination_building_spinner,
+                self.destination_floor_spinner,
+                force_defaults,
+            )
+            self._refresh_node_spinner(
+                self.origin_building_spinner,
+                self.origin_floor_spinner,
+                self.origin_spinner,
+                force_defaults,
+                choose_last=False,
+            )
+            self._refresh_node_spinner(
+                self.destination_building_spinner,
+                self.destination_floor_spinner,
+                self.destination_spinner,
+                force_defaults,
+                choose_last=True,
+            )
+        finally:
+            self._refreshing_options = False
+
+    def _refresh_floor_spinner(self, building_spinner, floor_spinner, force_defaults):
+        floors = nav.available_floors(self.selectable_nodes, building_spinner.text)
+        floor_spinner.disabled = len(floors) <= 1
+        default = "Piso1" if "Piso1" in floors else (floors[0] if floors else None)
+        self._set_spinner_values(floor_spinner, floors, default, force_defaults)
+
+    def _refresh_node_spinner(
+        self,
+        building_spinner,
+        floor_spinner,
+        node_spinner,
+        force_defaults,
+        choose_last,
+    ):
+        nodes = nav.nodes_for(self.selectable_nodes, building_spinner.text, floor_spinner.text)
+        labels = [node.label for node in nodes]
+        default = labels[-1] if choose_last and labels else labels[0] if labels else None
+        self._set_spinner_values(node_spinner, labels, default, force_defaults)
+
+    def _set_spinner_values(self, spinner, values, default=None, force_defaults=False):
+        spinner.values = values
+        if not values:
+            spinner.text = "-"
+            return
+        if force_defaults or spinner.text not in values:
+            spinner.text = default if default in values else values[0]
+
+    def _set_spinner_text_silently(self, spinner, value):
+        self._refreshing_options = True
+        try:
+            spinner.text = value
+        finally:
+            self._refreshing_options = False
+
+    def calculate_route(self):
+        if self.graph is None:
+            self.navigation_label.text = "Os mapas ainda não foram carregados."
+            return
+
+        origin = nav.find_selectable_node(
+            self.selectable_nodes,
+            self.origin_spinner.text,
+            self.origin_building_spinner.text,
+            self.origin_floor_spinner.text,
+        )
+        destination = nav.find_selectable_node(
+            self.selectable_nodes,
+            self.destination_spinner.text,
+            self.destination_building_spinner.text,
+            self.destination_floor_spinner.text,
+        )
+        if origin is None or destination is None:
+            self.navigation_label.text = "Escolhe uma origem e um destino válidos."
+            return
+
+        path, distance = nav.calculate_path(
+            self.graph,
+            origin,
+            destination,
+            mobility_reduced=self.profile_spinner.text == "Mobilidade reduzida",
+        )
+        if not path:
+            self.route = None
+            self.navigation_label.text = "Não foi possível encontrar uma rota para essas opções."
+            self.refresh_map()
+            return
+
+        self.route = nav.RouteState(graph=self.graph, path=path, distance=distance)
+        self.visible_floor_spinner.text = self.graph.nodes[path[0]].get("floor_key", self.visible_floor_spinner.text)
+        self.navigation_label.text = nav.navigation_instruction(self.graph, self.route)
+        self.refresh_map()
+
+    def confirm_arrival(self):
+        if self.route is None:
+            self.navigation_label.text = "Calcula primeiro uma rota."
+            return
+        if self.route.current_index >= len(self.route.path) - 1:
+            self.navigation_label.text = "Chegaste ao destino."
+            return
+
+        self.route.current_index = nav.next_navigation_index(self.graph, self.route)
+        current = self.route.path[self.route.current_index]
+        self.visible_floor_spinner.text = self.graph.nodes[current].get("floor_key", self.visible_floor_spinner.text)
+        self.navigation_label.text = nav.navigation_instruction(self.graph, self.route)
+        self.refresh_map()
+
+    def refresh_map(self):
+        if not hasattr(self, "map_widget"):
+            return
+        self.map_widget.set_state(
+            self.graph,
+            self.visible_floor_spinner.text,
+            self.route,
+            self.show_labels_checkbox.active,
+        )
+
+
+class AndroidNavigationApp(App):
+    title = "Navegação UTAD"
+
+    def build(self):
+        self.graph = None
+        self.floor_graphs = {}
+        self.selectable_nodes = []
+        self.route = None
+        self.profile = None
+        self._refreshing_options = False
+
+        self.screen_manager = ScreenManager()
+        self.screen_manager.add_widget(self._build_profile_screen())
+        self.screen_manager.add_widget(self._build_planner_screen())
+        self.screen_manager.add_widget(self._build_navigation_screen())
+
+        Clock.schedule_once(lambda *_: self.load_campus(), 0)
+        return self.screen_manager
+
+    def _build_profile_screen(self):
+        screen = Screen(name="profile")
+        root = BoxLayout(orientation="vertical", spacing=dp(14), padding=dp(22))
+        screen.add_widget(root)
+
+        root.add_widget(Widget(size_hint_y=0.16))
+        root.add_widget(
+            Label(
+                text="Navegação Pedestre UTAD",
+                bold=True,
+                font_size=sp(24),
+                size_hint_y=None,
+                height=dp(42),
+            )
+        )
+        root.add_widget(
+            Label(
+                text="Escolhe o teu perfil para calcular percursos adequados.",
+                halign="center",
+                valign="middle",
+                size_hint_y=None,
+                height=dp(70),
+            )
+        )
+        root.add_widget(
+            Button(
+                text="Normal",
+                size_hint_y=None,
+                height=dp(58),
+                on_release=lambda *_: self.select_profile("Normal"),
+            )
+        )
+        root.add_widget(
+            Button(
+                text="Mobilidade reduzida",
+                size_hint_y=None,
+                height=dp(58),
+                on_release=lambda *_: self.select_profile("Mobilidade reduzida"),
+            )
+        )
+
+        self.profile_status_label = Label(
+            text="A carregar mapas...",
+            halign="center",
+            valign="middle",
+            size_hint_y=None,
+            height=dp(80),
+        )
+        self.profile_status_label.bind(
+            width=lambda instance, value: setattr(instance, "text_size", (value, None)),
+        )
+        root.add_widget(self.profile_status_label)
+        root.add_widget(Widget())
+        return screen
+
+    def _build_planner_screen(self):
+        screen = Screen(name="planner")
+        root = BoxLayout(orientation="vertical", spacing=dp(8), padding=dp(8))
+        screen.add_widget(root)
+
+        top_bar = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(8))
+        self.planner_profile_label = Label(
+            text="Perfil: por escolher",
+            halign="left",
+            valign="middle",
+        )
+        self.planner_profile_label.bind(
+            width=lambda instance, value: setattr(instance, "text_size", (value, None)),
+        )
+        top_bar.add_widget(self.planner_profile_label)
+        top_bar.add_widget(
+            Button(
+                text="Alterar",
+                size_hint_x=None,
+                width=dp(96),
+                on_release=lambda *_: self.change_profile(),
+            )
+        )
+        root.add_widget(top_bar)
+
+        root.add_widget(self._build_location_controls())
+
+        self.planner_map_widget = GraphMapWidget(size_hint_y=1)
+        self.planner_map_widget.tile_cache_dir = Path(self.user_data_dir) / "osm_carto_tiles"
+        root.add_widget(self.planner_map_widget)
+
+        self.planner_status_label = Label(
+            text="Escolhe a origem e o destino para começar.",
+            halign="left",
+            valign="middle",
+            size_hint_y=None,
+            height=dp(46),
+        )
+        self.planner_status_label.bind(
+            width=lambda instance, value: setattr(instance, "text_size", (value, None)),
+        )
+        root.add_widget(self.planner_status_label)
+        root.add_widget(
+            Button(
+                text="Calcular rota",
+                size_hint_y=None,
+                height=dp(50),
+                on_release=lambda *_: self.calculate_route(),
+            )
+        )
+        return screen
+
+    def _build_navigation_screen(self):
+        screen = Screen(name="navigation")
+        root = BoxLayout(orientation="vertical", spacing=dp(8), padding=dp(8))
+        screen.add_widget(root)
+
+        top_bar = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(8))
+        self.route_summary_label = Label(
+            text="Rota",
+            halign="left",
+            valign="middle",
+        )
+        self.route_summary_label.bind(
+            width=lambda instance, value: setattr(instance, "text_size", (value, None)),
+        )
+        top_bar.add_widget(self.route_summary_label)
+        top_bar.add_widget(
+            Button(
+                text="Cancelar",
+                size_hint_x=None,
+                width=dp(104),
+                on_release=lambda *_: self.cancel_route(),
+            )
+        )
+        root.add_widget(top_bar)
+
+        instruction_panel = Surface(
+            orientation="vertical",
+            background="#F7F8FA",
+            size_hint_y=None,
+            height=dp(150),
+            padding=dp(10),
+        )
+        self.navigation_label = Label(
+            text="Calcula uma rota para começar.",
+            color=get_color_from_hex("#111111"),
+            halign="left",
+            valign="top",
+            size_hint_y=None,
+            height=dp(132),
+        )
+        self.navigation_label.bind(
+            size=lambda instance, value: setattr(instance, "text_size", value),
+        )
+        instruction_panel.add_widget(self.navigation_label)
+        root.add_widget(instruction_panel)
+
+        self.route_map_widget = GraphMapWidget(size_hint_y=1)
+        self.route_map_widget.tile_cache_dir = Path(self.user_data_dir) / "osm_carto_tiles"
+        root.add_widget(self.route_map_widget)
+
+        buttons = BoxLayout(size_hint_y=None, height=dp(50), spacing=dp(8))
+        buttons.add_widget(Button(text="Próximo ponto", on_release=lambda *_: self.confirm_arrival()))
+        buttons.add_widget(Button(text="Cancelar", on_release=lambda *_: self.cancel_route()))
+        root.add_widget(buttons)
+        return screen
+
+    def _build_location_controls(self):
+        scroll = ScrollView(size_hint_y=None, height=dp(250), do_scroll_x=False)
+        grid = GridLayout(cols=2, spacing=dp(6), size_hint_y=None)
+        grid.bind(minimum_height=grid.setter("height"))
+        scroll.add_widget(grid)
+
+        self.origin_building_spinner = self._add_spinner(grid, "Edifício origem", [], "")
+        self.origin_floor_spinner = self._add_spinner(grid, "Piso origem", [], "")
+        self.origin_spinner = self._add_spinner(grid, "Origem", [], "")
+        self.destination_building_spinner = self._add_spinner(grid, "Edifício destino", [], "")
+        self.destination_floor_spinner = self._add_spinner(grid, "Piso destino", [], "")
+        self.destination_spinner = self._add_spinner(grid, "Destino", [], "")
+        self.visible_floor_spinner = self._add_spinner(grid, "Mapa visível", nav.APP_FLOORS, "Exterior")
+
+        grid.add_widget(Label(text="Mostrar labels", halign="left", size_hint_y=None, height=dp(38)))
+        self.show_labels_checkbox = CheckBox(size_hint_y=None, height=dp(38))
+        grid.add_widget(self.show_labels_checkbox)
+
+        for spinner in [
+            self.origin_building_spinner,
+            self.origin_floor_spinner,
+            self.origin_spinner,
+            self.destination_building_spinner,
+            self.destination_floor_spinner,
+            self.destination_spinner,
+        ]:
+            spinner.bind(text=lambda *_: self.on_selection_changed())
+        self.visible_floor_spinner.bind(text=lambda *_: self.refresh_maps())
+        self.show_labels_checkbox.bind(active=lambda *_: self.refresh_maps())
+        return scroll
+
+    def _add_spinner(self, parent, label_text, values, text):
+        parent.add_widget(Label(text=label_text, halign="left", size_hint_y=None, height=dp(38)))
+        spinner = Spinner(
+            text=text or "-",
+            values=values,
+            size_hint_y=None,
+            height=dp(38),
+        )
+        parent.add_widget(spinner)
+        return spinner
+
+    def _fit_label_height(self, instance, texture_size):
+        instance.height = max(dp(112), texture_size[1] + dp(18))
+
+    def load_campus(self):
+        try:
+            self.graph, self.floor_graphs = nav.build_campus_graph()
+            self.selectable_nodes = nav.collect_selectable_nodes(self.graph)
+        except Exception as error:
+            error_text = f"Erro ao carregar mapas:\n{error}"
+            self.profile_status_label.text = error_text
+            self.planner_status_label.text = error_text
+            self.navigation_label.text = error_text
+            return
+
+        self.route = None
+        self.refresh_option_lists(force_defaults=True)
+        self.profile_status_label.text = "Mapas carregados. Escolhe o perfil para continuar."
+        self.planner_status_label.text = "Escolhe a origem e o destino para começar."
+        self.refresh_maps()
+
+    def select_profile(self, profile):
+        self.profile = profile
+        self._sync_profile_labels()
+        self.screen_manager.current = "planner"
+        self.refresh_maps()
+
+    def change_profile(self):
+        self.screen_manager.current = "profile"
+
+    def _sync_profile_labels(self):
+        profile = self.profile or "por escolher"
+        self.planner_profile_label.text = f"Perfil: {profile}"
+        self.route_summary_label.text = f"Perfil: {profile}"
+
+    def on_selection_changed(self):
+        if self._refreshing_options:
+            return
+        if not self.selectable_nodes:
+            return
+        self.refresh_option_lists(force_defaults=False)
+        if self.route is None and self.origin_floor_spinner.text in nav.APP_FLOORS:
+            self._set_spinner_text_silently(self.visible_floor_spinner, self.origin_floor_spinner.text)
+        self.refresh_maps()
+
+    def refresh_option_lists(self, force_defaults=False):
+        self._refreshing_options = True
+        try:
+            buildings = nav.available_buildings(self.selectable_nodes)
+            self._set_spinner_values(
+                self.origin_building_spinner,
+                buildings,
+                "ECT2" if "ECT2" in buildings else None,
+                force_defaults,
+            )
+            self._set_spinner_values(
+                self.destination_building_spinner,
+                buildings,
+                "ECT2" if "ECT2" in buildings else None,
+                force_defaults,
+            )
+
+            self._refresh_floor_spinner(self.origin_building_spinner, self.origin_floor_spinner, force_defaults)
+            self._refresh_floor_spinner(
+                self.destination_building_spinner,
+                self.destination_floor_spinner,
+                force_defaults,
+            )
+            self._refresh_node_spinner(
+                self.origin_building_spinner,
+                self.origin_floor_spinner,
+                self.origin_spinner,
+                force_defaults,
+                choose_last=False,
+            )
+            self._refresh_node_spinner(
+                self.destination_building_spinner,
+                self.destination_floor_spinner,
+                self.destination_spinner,
+                force_defaults,
+                choose_last=True,
+            )
+        finally:
+            self._refreshing_options = False
+
+    def _refresh_floor_spinner(self, building_spinner, floor_spinner, force_defaults):
+        floors = nav.available_floors(self.selectable_nodes, building_spinner.text)
+        floor_spinner.disabled = len(floors) <= 1
+        default = "Piso1" if "Piso1" in floors else (floors[0] if floors else None)
+        self._set_spinner_values(floor_spinner, floors, default, force_defaults)
+
+    def _refresh_node_spinner(
+        self,
+        building_spinner,
+        floor_spinner,
+        node_spinner,
+        force_defaults,
+        choose_last,
+    ):
+        nodes = nav.nodes_for(self.selectable_nodes, building_spinner.text, floor_spinner.text)
+        labels = [node.label for node in nodes]
+        default = labels[-1] if choose_last and labels else labels[0] if labels else None
+        self._set_spinner_values(node_spinner, labels, default, force_defaults)
+
+    def _set_spinner_values(self, spinner, values, default=None, force_defaults=False):
+        spinner.values = values
+        if not values:
+            spinner.text = "-"
+            return
+        if force_defaults or spinner.text not in values:
+            spinner.text = default if default in values else values[0]
+
+    def _set_spinner_text_silently(self, spinner, value):
+        self._refreshing_options = True
+        try:
+            spinner.text = value
+        finally:
+            self._refreshing_options = False
+
+    def calculate_route(self):
+        if self.graph is None:
+            self.planner_status_label.text = "Os mapas ainda não foram carregados."
+            return
+        if self.profile is None:
+            self.screen_manager.current = "profile"
+            self.profile_status_label.text = "Escolhe um perfil para calcular a rota."
+            return
+
+        origin = nav.find_selectable_node(
+            self.selectable_nodes,
+            self.origin_spinner.text,
+            self.origin_building_spinner.text,
+            self.origin_floor_spinner.text,
+        )
+        destination = nav.find_selectable_node(
+            self.selectable_nodes,
+            self.destination_spinner.text,
+            self.destination_building_spinner.text,
+            self.destination_floor_spinner.text,
+        )
+        if origin is None or destination is None:
+            self.planner_status_label.text = "Escolhe uma origem e um destino válidos."
+            return
+
+        path, distance = nav.calculate_path(
+            self.graph,
+            origin,
+            destination,
+            mobility_reduced=self.profile == "Mobilidade reduzida",
+        )
+        if not path:
+            self.route = None
+            self.planner_status_label.text = "Não foi possível encontrar uma rota para essas opções."
+            self.refresh_maps()
+            return
+
+        self.route = nav.RouteState(graph=self.graph, path=path, distance=distance)
+        self._set_spinner_text_silently(
+            self.visible_floor_spinner,
+            self.graph.nodes[path[0]].get("floor_key", self.visible_floor_spinner.text),
+        )
+        self.route_summary_label.text = f"Rota: {distance:.1f} m · {self.profile}"
+        self.navigation_label.text = nav.navigation_instruction(self.graph, self.route)
+        self.planner_status_label.text = f"Rota pronta: {distance:.1f} m."
+        self.screen_manager.current = "navigation"
+        self.refresh_maps()
+
+    def confirm_arrival(self):
+        if self.route is None:
+            self.navigation_label.text = "Calcula primeiro uma rota."
+            return
+        if self.route.current_index >= len(self.route.path) - 1:
+            self.navigation_label.text = "Chegaste ao destino."
+            return
+
+        self.route.current_index = nav.next_navigation_index(self.graph, self.route)
+        current = self.route.path[self.route.current_index]
+        self._set_spinner_text_silently(
+            self.visible_floor_spinner,
+            self.graph.nodes[current].get("floor_key", self.visible_floor_spinner.text),
+        )
+        self.navigation_label.text = nav.navigation_instruction(self.graph, self.route)
+        self.refresh_maps()
+
+    def cancel_route(self):
+        self.route = None
+        self.navigation_label.text = "Rota cancelada."
+        self.planner_status_label.text = "Escolhe a origem e o destino para começar."
+        self.screen_manager.current = "planner"
+        self.refresh_maps()
+
+    def refresh_maps(self):
+        show_labels = self.show_labels_checkbox.active if hasattr(self, "show_labels_checkbox") else False
+        visible_floor = self.visible_floor_spinner.text if hasattr(self, "visible_floor_spinner") else "Exterior"
+        if hasattr(self, "planner_map_widget"):
+            self.planner_map_widget.set_state(
+                self.graph,
+                visible_floor,
+                None,
+                show_labels,
+            )
+        if hasattr(self, "route_map_widget"):
+            self.route_map_widget.set_state(
+                self.graph,
+                visible_floor,
+                self.route,
+                show_labels,
+            )
+
+
+def main():
+    AndroidNavigationApp().run()
+
+
+if __name__ == "__main__":
+    main()
