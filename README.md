@@ -92,6 +92,24 @@ Usar directamente um ficheiro OSM:
 python navegacao_campus_vscode.py --ficheiro "OSM Pisos/Piso3.osm" --origem 1 --destino 38
 ```
 
+## Protótipo desktop
+
+Também existe uma primeira interface desktop para validar a navegação passo a passo antes de avançar para uma futura aplicação móvel.
+
+Executar:
+
+```bash
+python app_desktop.py
+```
+
+Na interface é possível:
+
+- escolher perfil normal ou mobilidade reduzida;
+- escolher o piso;
+- seleccionar origem e destino;
+- calcular a rota;
+- confirmar a chegada a cada ponto antes de receber a próxima indicação.
+
 ## Estado do repositório
 
 Este projecto está preparado para ser usado com o repositório:
@@ -107,4 +125,3 @@ git init
 git remote add origin https://github.com/al30528/Projecto-de-Licenciatura.git
 git status
 ```
-
