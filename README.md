@@ -109,6 +109,7 @@ Na interface é possível:
 - seleccionar origem e destino;
 - calcular a rota;
 - ver a imagem do piso posicionada/rodada segundo a calibração do JOSM/PicLayer;
+- ver tiles OpenStreetMap Carto como fundo do grafo exterior;
 - navegar entre pisos através de escadas/elevador quando existem ligações nos dados OSM;
 - confirmar a chegada a cada ponto antes de receber a próxima indicação.
 

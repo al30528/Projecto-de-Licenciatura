@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import math
 import tkinter as tk
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from tkinter import messagebox, ttk
@@ -38,6 +40,13 @@ FLOOR_IMAGES = {
     "Piso3": IMAGE_DIR / "Piso 3.jpg",
 }
 INDOOR_FLOORS = ["Piso1", "Piso2", "Piso3"]
+APP_FLOORS = ["Exterior", *INDOOR_FLOORS]
+BUILDING_ORDER = ["ECT1", "ECT2", "ECHS2"]
+TILE_CACHE_DIR = BASE_DIR / ".tile_cache" / "osm_carto"
+OSM_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+OSM_TILE_USER_AGENT = "UTADIndoorNavigationPrototype/0.1 (academic project)"
+EXTERIOR_TILE_ZOOM = 18
+WEB_MERCATOR_LIMIT = 20037508.342789244
 
 
 @dataclass
@@ -57,16 +66,6 @@ def floor_node_id(floor: str, node_id: str) -> str:
     return f"{floor}:{node_id}"
 
 
-def transition_target(value: str | None) -> str | None:
-    if not value:
-        return None
-
-    parts = value.upper().split("-")
-    if len(parts) == 2 and parts[0].startswith("P") and parts[1].startswith("P"):
-        return f"{parts[1]}-{parts[0]}"
-    return None
-
-
 def vertical_edge_weight(from_node: dict, to_node: dict, edge_type: str) -> float:
     first_floor = int(from_node.get("floor", 0) or 0)
     second_floor = int(to_node.get("floor", 0) or 0)
@@ -78,7 +77,7 @@ def build_campus_graph():
     campus_graph = nx.Graph()
     floor_graphs = {}
 
-    for floor in INDOOR_FLOORS:
+    for floor in APP_FLOORS:
         graph = build_graph(*parse_osm(OSM_FILES[floor]))
         floor_graphs[floor] = graph
 
@@ -99,71 +98,12 @@ def build_campus_graph():
             )
 
     add_vertical_connections(campus_graph)
+    add_exterior_transition_connections(campus_graph)
     return campus_graph, floor_graphs
 
 
 def add_vertical_connections(campus_graph):
     nodes = list(campus_graph.nodes(data=True))
-    transition_nodes = [
-        (node_id, data)
-        for node_id, data in nodes
-        if data.get("transition")
-    ]
-
-    for node_id, data in transition_nodes:
-        expected_reverse = transition_target(data.get("transition"))
-        if not expected_reverse:
-            continue
-
-        for other_id, other_data in transition_nodes:
-            if node_id == other_id:
-                continue
-            if other_data.get("transition", "").upper() != expected_reverse:
-                continue
-            add_vertical_edge(campus_graph, node_id, data, other_id, other_data, "stairs")
-
-    for node_id, data in transition_nodes:
-        transition = data.get("transition", "").upper()
-        parts = transition.split("-")
-        if len(parts) != 2 or not parts[1].startswith("P"):
-            continue
-
-        target_floor = f"Piso{parts[1][1:]}"
-        if any(
-            campus_graph.has_edge(node_id, other_id)
-            for other_id, other_data in nodes
-            if other_data.get("floor_key") == target_floor
-        ):
-            continue
-
-        source_floor_number = floor_number(data.get("floor_key", ""))
-        target_number = floor_number(target_floor)
-        if source_floor_number is None or target_number is None:
-            continue
-
-        candidates = [
-            (other_id, other_data)
-            for other_id, other_data in nodes
-            if other_data.get("floor_key") == target_floor
-            and other_data.get("type") == data.get("type")
-        ]
-        if not candidates:
-            continue
-
-        wanted = f"P{source_floor_number}"
-        candidates.sort(
-            key=lambda item: (
-                wanted not in str(
-                    item[1].get("transition")
-                    or item[1].get("name")
-                    or item[1].get("roomname")
-                    or ""
-                ).upper(),
-                item[1].get("nodeid", ""),
-            )
-        )
-        other_id, other_data = candidates[0]
-        add_vertical_edge(campus_graph, node_id, data, other_id, other_data, data.get("type", "stairs"))
 
     elevator_nodes = [
         (node_id, data)
@@ -180,6 +120,55 @@ def add_vertical_connections(campus_graph):
                 add_vertical_edge(campus_graph, node_id, data, other_id, other_data, "elevator")
 
 
+def exterior_transition_edge_type(data_a: dict, data_b: dict):
+    types = {data_a.get("type"), data_b.get("type")}
+    if "elevator" in types:
+        return "elevator"
+    if "stairs" in types:
+        return "stairs"
+    if "rampa" in types or "ramp" in types:
+        return "ramp"
+    return "connection"
+
+
+def add_exterior_transition_connections(campus_graph):
+    transition_nodes = [
+        (node_id, data)
+        for node_id, data in campus_graph.nodes(data=True)
+        if data.get("transition")
+    ]
+
+    add_matching_transition_group_edges(campus_graph, transition_nodes)
+
+
+def add_matching_transition_group_edges(campus_graph, transition_nodes):
+    groups = {}
+    for node_id, data in transition_nodes:
+        for label in transition_labels(data):
+            groups.setdefault(label, []).append((node_id, data))
+
+    for group_nodes in groups.values():
+        if len(group_nodes) < 2:
+            continue
+        for index, (node_id, data) in enumerate(group_nodes):
+            for other_id, other_data in group_nodes[index + 1:]:
+                if campus_graph.has_edge(node_id, other_id):
+                    continue
+                edge_type = exterior_transition_edge_type(data, other_data)
+                add_transition_edge(campus_graph, node_id, data, other_id, other_data, edge_type)
+
+
+def transition_labels(data: dict):
+    value = str(data.get("transition", "")).strip()
+    if not value:
+        return []
+    return [
+        label.strip().upper()
+        for label in value.split(";")
+        if label.strip()
+    ]
+
+
 def add_vertical_edge(campus_graph, node_a, data_a, node_b, data_b, edge_type):
     accessibility = 3 if edge_type == "elevator" else 2
     weight = vertical_edge_weight(data_a, data_b, edge_type)
@@ -192,6 +181,25 @@ def add_vertical_edge(campus_graph, node_a, data_a, node_b, data_b, edge_type):
         edge_type=edge_type,
         accessibility=accessibility,
         vertical=True,
+    )
+
+
+def add_transition_edge(campus_graph, node_a, data_a, node_b, data_b, edge_type):
+    distance = math.dist(
+        lonlat_to_web_mercator(data_a["lat"], data_a["lon"]),
+        lonlat_to_web_mercator(data_b["lat"], data_b["lon"]),
+    )
+    accessibility = 3 if edge_type == "elevator" else 2 if edge_type == "stairs" else 4
+    campus_graph.add_edge(
+        node_a,
+        node_b,
+        weight=distance,
+        length=round(distance, 2),
+        way_id=f"transition:{node_a}->{node_b}",
+        edge_type=edge_type,
+        accessibility=accessibility,
+        vertical=edge_type in {"stairs", "elevator"},
+        transition=True,
     )
 
 
@@ -277,6 +285,50 @@ def lonlat_to_web_mercator(lat: float, lon: float):
     x_value = earth_radius * math.radians(lon)
     y_value = earth_radius * math.log(math.tan(math.pi / 4 + math.radians(lat) / 2))
     return x_value, y_value
+
+
+def web_mercator_tile_size(zoom: int):
+    return (WEB_MERCATOR_LIMIT * 2) / (2 ** zoom)
+
+
+def web_mercator_to_tile(x_value: float, y_value: float, zoom: int):
+    tile_size = web_mercator_tile_size(zoom)
+    tile_x = math.floor((x_value + WEB_MERCATOR_LIMIT) / tile_size)
+    tile_y = math.floor((WEB_MERCATOR_LIMIT - y_value) / tile_size)
+    max_tile = (2 ** zoom) - 1
+    return (
+        max(0, min(max_tile, tile_x)),
+        max(0, min(max_tile, tile_y)),
+    )
+
+
+def tile_web_mercator_extent(tile_x: int, tile_y: int, zoom: int):
+    tile_size = web_mercator_tile_size(zoom)
+    min_x = -WEB_MERCATOR_LIMIT + tile_x * tile_size
+    max_x = min_x + tile_size
+    max_y = WEB_MERCATOR_LIMIT - tile_y * tile_size
+    min_y = max_y - tile_size
+    return min_x, max_x, min_y, max_y
+
+
+def cached_osm_tile(tile_x: int, tile_y: int, zoom: int):
+    tile_path = TILE_CACHE_DIR / str(zoom) / str(tile_x) / f"{tile_y}.png"
+    if tile_path.exists():
+        return tile_path
+
+    tile_path.parent.mkdir(parents=True, exist_ok=True)
+    url = OSM_TILE_URL.format(z=zoom, x=tile_x, y=tile_y)
+    request = urllib.request.Request(
+        url,
+        headers={"User-Agent": OSM_TILE_USER_AGENT},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=8) as response:
+            tile_path.write_bytes(response.read())
+    except (urllib.error.URLError, TimeoutError, OSError):
+        return None
+
+    return tile_path
 
 
 def image_pixel_to_world_from_world_file(world_file: dict):
@@ -387,12 +439,14 @@ class DesktopNavigationApp(tk.Tk):
         self.route: RouteState | None = None
 
         self.profile_var = tk.StringVar(value="normal")
+        self.origin_building_var = tk.StringVar(value="ECT2")
+        self.destination_building_var = tk.StringVar(value="ECT2")
         self.origin_floor_var = tk.StringVar(value="Piso1")
         self.destination_floor_var = tk.StringVar(value="Piso1")
         self.visible_floor_var = tk.StringVar(value="Piso1")
         self.origin_var = tk.StringVar()
         self.destination_var = tk.StringVar()
-        self.status_var = tk.StringVar(value="Escolhe o piso, a origem e o destino.")
+        self.status_var = tk.StringVar(value="Escolhe o edifício, a origem e o destino.")
         self.step_var = tk.StringVar(value="Ainda não há rota calculada.")
         self.show_labels_var = tk.BooleanVar(value=False)
 
@@ -422,63 +476,85 @@ class DesktopNavigationApp(tk.Tk):
 
         ttk.Separator(sidebar).grid(row=3, column=0, sticky="ew", pady=14)
 
-        ttk.Label(sidebar, text="Piso de origem").grid(row=4, column=0, sticky="w")
+        ttk.Label(sidebar, text="Edifício de origem").grid(row=4, column=0, sticky="w")
+        self.origin_building_combo = ttk.Combobox(
+            sidebar,
+            textvariable=self.origin_building_var,
+            values=BUILDING_ORDER,
+            state="readonly",
+            width=32,
+        )
+        self.origin_building_combo.grid(row=5, column=0, sticky="ew", pady=(4, 10))
+        self.origin_building_combo.bind("<<ComboboxSelected>>", lambda _event: self.refresh_node_lists())
+
+        ttk.Label(sidebar, text="Piso/área de origem").grid(row=6, column=0, sticky="w")
         self.origin_floor_combo = ttk.Combobox(
             sidebar,
             textvariable=self.origin_floor_var,
-            values=INDOOR_FLOORS,
+            values=APP_FLOORS,
             state="readonly",
             width=32,
         )
-        self.origin_floor_combo.grid(row=5, column=0, sticky="ew", pady=(4, 10))
+        self.origin_floor_combo.grid(row=7, column=0, sticky="ew", pady=(4, 10))
         self.origin_floor_combo.bind("<<ComboboxSelected>>", lambda _event: self.refresh_node_lists())
 
-        ttk.Label(sidebar, text="Origem").grid(row=6, column=0, sticky="w")
+        ttk.Label(sidebar, text="Origem").grid(row=8, column=0, sticky="w")
         self.origin_combo = ttk.Combobox(sidebar, textvariable=self.origin_var, width=32)
-        self.origin_combo.grid(row=7, column=0, sticky="ew", pady=(4, 10))
+        self.origin_combo.grid(row=9, column=0, sticky="ew", pady=(4, 10))
 
-        ttk.Label(sidebar, text="Piso de destino").grid(row=8, column=0, sticky="w")
+        ttk.Label(sidebar, text="Edifício de destino").grid(row=10, column=0, sticky="w")
+        self.destination_building_combo = ttk.Combobox(
+            sidebar,
+            textvariable=self.destination_building_var,
+            values=BUILDING_ORDER,
+            state="readonly",
+            width=32,
+        )
+        self.destination_building_combo.grid(row=11, column=0, sticky="ew", pady=(4, 10))
+        self.destination_building_combo.bind("<<ComboboxSelected>>", lambda _event: self.refresh_node_lists())
+
+        ttk.Label(sidebar, text="Piso/área de destino").grid(row=12, column=0, sticky="w")
         self.destination_floor_combo = ttk.Combobox(
             sidebar,
             textvariable=self.destination_floor_var,
-            values=INDOOR_FLOORS,
+            values=APP_FLOORS,
             state="readonly",
             width=32,
         )
-        self.destination_floor_combo.grid(row=9, column=0, sticky="ew", pady=(4, 10))
+        self.destination_floor_combo.grid(row=13, column=0, sticky="ew", pady=(4, 10))
         self.destination_floor_combo.bind("<<ComboboxSelected>>", lambda _event: self.refresh_node_lists())
 
-        ttk.Label(sidebar, text="Destino").grid(row=10, column=0, sticky="w")
+        ttk.Label(sidebar, text="Destino").grid(row=14, column=0, sticky="w")
         self.destination_combo = ttk.Combobox(
             sidebar,
             textvariable=self.destination_var,
             width=32,
         )
-        self.destination_combo.grid(row=11, column=0, sticky="ew", pady=(4, 10))
+        self.destination_combo.grid(row=15, column=0, sticky="ew", pady=(4, 10))
 
         ttk.Button(
             sidebar,
             text="Calcular rota",
             command=self.calculate_route,
-        ).grid(row=12, column=0, sticky="ew", pady=(4, 8))
+        ).grid(row=16, column=0, sticky="ew", pady=(4, 8))
 
         ttk.Button(
             sidebar,
-            text="Cheguei ao ponto indicado",
+            text="Confirmar chegada",
             command=self.confirm_next_step,
-        ).grid(row=13, column=0, sticky="ew")
+        ).grid(row=17, column=0, sticky="ew")
 
-        ttk.Separator(sidebar).grid(row=14, column=0, sticky="ew", pady=14)
+        ttk.Separator(sidebar).grid(row=18, column=0, sticky="ew", pady=14)
 
-        ttk.Label(sidebar, text="Piso visível").grid(row=15, column=0, sticky="w")
+        ttk.Label(sidebar, text="Piso visível").grid(row=19, column=0, sticky="w")
         self.visible_floor_combo = ttk.Combobox(
             sidebar,
             textvariable=self.visible_floor_var,
-            values=INDOOR_FLOORS,
+            values=APP_FLOORS,
             state="readonly",
             width=32,
         )
-        self.visible_floor_combo.grid(row=16, column=0, sticky="ew", pady=(4, 12))
+        self.visible_floor_combo.grid(row=20, column=0, sticky="ew", pady=(4, 12))
         self.visible_floor_combo.bind("<<ComboboxSelected>>", lambda _event: self.draw_map())
 
         ttk.Checkbutton(
@@ -486,25 +562,25 @@ class DesktopNavigationApp(tk.Tk):
             text="Mostrar labels no grafo",
             variable=self.show_labels_var,
             command=self.draw_map,
-        ).grid(row=17, column=0, sticky="w", pady=(0, 12))
+        ).grid(row=21, column=0, sticky="w", pady=(0, 12))
 
-        ttk.Label(sidebar, text="Navegação").grid(row=18, column=0, sticky="w")
+        ttk.Label(sidebar, text="Navegação").grid(row=22, column=0, sticky="w")
         step_label = ttk.Label(
             sidebar,
             textvariable=self.step_var,
             wraplength=280,
             justify="left",
         )
-        step_label.grid(row=19, column=0, sticky="ew", pady=(6, 12))
+        step_label.grid(row=23, column=0, sticky="ew", pady=(6, 12))
 
-        ttk.Label(sidebar, text="Estado").grid(row=20, column=0, sticky="w")
+        ttk.Label(sidebar, text="Estado").grid(row=24, column=0, sticky="w")
         status_label = ttk.Label(
             sidebar,
             textvariable=self.status_var,
             wraplength=280,
             justify="left",
         )
-        status_label.grid(row=21, column=0, sticky="ew", pady=(6, 0))
+        status_label.grid(row=25, column=0, sticky="ew", pady=(6, 0))
 
         main_area = ttk.Frame(self, padding=(0, 10, 10, 10))
         main_area.grid(row=0, column=1, sticky="nsew")
@@ -525,10 +601,10 @@ class DesktopNavigationApp(tk.Tk):
         self.route = None
         self.refresh_node_lists()
         self.status_var.set(
-            f"ECT2 carregado: {self.graph.number_of_nodes()} nós, "
+            f"Campus carregado: {self.graph.number_of_nodes()} nós, "
             f"{self.graph.number_of_edges()} arestas, incluindo ligações entre pisos."
         )
-        self.step_var.set("Escolhe origem e destino para calcular uma rota.")
+        self.step_var.set("Escolhe a origem e o destino para começar.")
         self.draw_map()
 
     def refresh_node_lists(self):
@@ -536,15 +612,28 @@ class DesktopNavigationApp(tk.Tk):
             return
 
         self.named_nodes = self._collect_named_nodes()
+        self._refresh_building_values()
+        self._refresh_floor_combo(
+            self.origin_building_var,
+            self.origin_floor_var,
+            self.origin_floor_combo,
+        )
+        self._refresh_floor_combo(
+            self.destination_building_var,
+            self.destination_floor_var,
+            self.destination_floor_combo,
+        )
         origin_values = [
             item["label"]
             for item in self.named_nodes
-            if item["floor"] == self.origin_floor_var.get()
+            if item["building"] == self.origin_building_var.get()
+            and item["floor"] == self.origin_floor_var.get()
         ]
         destination_values = [
             item["label"]
             for item in self.named_nodes
-            if item["floor"] == self.destination_floor_var.get()
+            if item["building"] == self.destination_building_var.get()
+            and item["floor"] == self.destination_floor_var.get()
         ]
         self.origin_combo["values"] = origin_values
         self.destination_combo["values"] = destination_values
@@ -556,16 +645,64 @@ class DesktopNavigationApp(tk.Tk):
             self.visible_floor_var.set(self.origin_floor_var.get())
         self.draw_map()
 
+    def _refresh_building_values(self):
+        buildings = sorted(
+            {
+                item["building"]
+                for item in self.named_nodes
+                if item["building"] and item["building"] != "Exterior"
+            },
+            key=self._building_sort_key,
+        )
+        self.origin_building_combo["values"] = buildings
+        self.destination_building_combo["values"] = buildings
+        if buildings:
+            if self.origin_building_var.get() not in buildings:
+                self.origin_building_var.set(buildings[0])
+            if self.destination_building_var.get() not in buildings:
+                self.destination_building_var.set(buildings[0])
+
+    def _refresh_floor_combo(self, building_var, floor_var, floor_combo):
+        floors = sorted(
+            {
+                item["floor"]
+                for item in self.named_nodes
+                if item["building"] == building_var.get()
+            },
+            key=self._floor_sort_key,
+        )
+        floor_combo["values"] = floors
+        floor_combo["state"] = "readonly" if len(floors) > 1 else "disabled"
+        if floors and floor_var.get() not in floors:
+            floor_var.set(floors[0])
+
+    def _building_sort_key(self, building):
+        try:
+            return (BUILDING_ORDER.index(building), building)
+        except ValueError:
+            return (len(BUILDING_ORDER), building)
+
+    def _floor_sort_key(self, floor):
+        try:
+            return (APP_FLOORS.index(floor), floor)
+        except ValueError:
+            return (len(APP_FLOORS), floor)
+
     def _collect_named_nodes(self):
         nodes = []
         for node_id, data in self.graph.nodes(data=True):
             name = data.get("roomname") or data.get("name")
             nodeid = str(data.get("nodeid", "")).strip()
+            building = str(data.get("building", "")).strip()
             floor = data.get("floor_key", "")
-            node_type = data.get("type")
+            node_type = str(data.get("type", "")).lower()
             if not name:
                 continue
+            if not building or building == "Exterior":
+                continue
             if node_type == "connection":
+                continue
+            if self._is_exterior_movement_point(name, floor, node_type):
                 continue
 
             prefix = f"{nodeid} - " if nodeid else ""
@@ -574,6 +711,7 @@ class DesktopNavigationApp(tk.Tk):
                     "node_id": node_id,
                     "nodeid": nodeid,
                     "name": name,
+                    "building": building,
                     "floor": floor,
                     "type": node_type,
                     "label": f"{prefix}{name}",
@@ -588,20 +726,35 @@ class DesktopNavigationApp(tk.Tk):
 
         return sorted(nodes, key=sort_key)
 
-    def _selected_node(self, selected_label: str, floor: str):
+    def _is_exterior_movement_point(self, name: str, floor: str, node_type: str):
+        if floor != "Exterior":
+            return False
+        normalized_name = name.strip().lower()
+        return normalized_name in {"calçada", "calcada", "passadeira"} or normalized_name.startswith("rampa")
+
+    def _selected_node(self, selected_label: str, building: str, floor: str):
         for item in self.named_nodes:
-            if item["label"] == selected_label and item["floor"] == floor:
+            if (
+                item["label"] == selected_label
+                and item["building"] == building
+                and item["floor"] == floor
+            ):
                 return item["node_id"]
         return resolve_node(self.graph, selected_label)
 
     def calculate_route(self):
         if self.graph is None:
-            messagebox.showwarning("Sem piso", "Carrega primeiro um piso.")
+            messagebox.showwarning("Sem mapa", "Carrega primeiro os mapas.")
             return
 
-        origin = self._selected_node(self.origin_var.get(), self.origin_floor_var.get())
+        origin = self._selected_node(
+            self.origin_var.get(),
+            self.origin_building_var.get(),
+            self.origin_floor_var.get(),
+        )
         destination = self._selected_node(
             self.destination_var.get(),
+            self.destination_building_var.get(),
             self.destination_floor_var.get(),
         )
 
@@ -633,7 +786,7 @@ class DesktopNavigationApp(tk.Tk):
         )
         self.visible_floor_var.set(self.graph.nodes[path[0]].get("floor_key", self.visible_floor_var.get()))
         self.status_var.set(
-            f"Rota calculada com {len(path)} pontos e {distance:.1f} metros."
+            f"Rota pronta: {distance:.1f} m."
         )
         self._update_step_text()
         self.draw_map()
@@ -683,36 +836,44 @@ class DesktopNavigationApp(tk.Tk):
         if index >= len(path) - 1:
             current = path[-1]
             self.step_var.set(
-                f"Destino alcançado: {self._node_display_name(current)}."
+                f"Destino alcançado\n\n{self._navigation_point_name(current)}"
             )
             return
 
         current = path[index]
         next_node = path[index + 1]
         edge = self.graph[current][next_node]
+        progress = f"Passo {index + 1} de {len(path) - 1}"
+        current_text = self._navigation_point_name(current)
         if edge.get("vertical"):
             if edge.get("edge_type") == "elevator":
                 exit_index = self._elevator_exit_index(index)
                 exit_node = path[exit_index]
+                next_text = self._navigation_point_name(exit_node)
                 self.step_var.set(
-                    f"Estás em {self._node_display_name(current)}.\n"
-                    f"Usa o elevador para ir directamente para "
-                    f"{self._node_display_name(exit_node)}.\n"
-                    "Quando saíres do elevador, confirma para receber a próxima indicação."
+                    f"{progress}\n\n"
+                    f"Local atual: {current_text}\n"
+                    f"Próximo ponto: {next_text}\n\n"
+                    "Ação: usa o elevador.\n"
+                    "Depois confirma a chegada."
                 )
             else:
+                next_text = self._navigation_point_name(next_node)
                 self.step_var.set(
-                    f"Estás em {self._node_display_name(current)}.\n"
-                    f"Usa {self._edge_name(edge)} para ir para "
-                    f"{self._node_display_name(next_node)}.\n"
-                    "Quando chegares ao novo piso, confirma para receber a próxima indicação."
+                    f"{progress}\n\n"
+                    f"Local atual: {current_text}\n"
+                    f"Próximo ponto: {next_text}\n\n"
+                    f"Ação: usa {self._edge_name(edge)}.\n"
+                    "Depois confirma a chegada."
                 )
         else:
+            next_text = self._navigation_point_name(next_node)
             self.step_var.set(
-                f"Estás em {self._node_display_name(current)}.\n"
-                f"Segue para {self._node_display_name(next_node)}.\n"
-                f"Distância deste passo: {edge.get('length', edge.get('weight', 0)):.1f} m.\n"
-                "Quando lá chegares, confirma para receber a próxima indicação."
+                f"{progress}\n\n"
+                f"Local atual: {current_text}\n"
+                f"Próximo ponto: {next_text}\n\n"
+                f"Ação: avança {edge.get('length', edge.get('weight', 0)):.1f} m.\n"
+                "Depois confirma a chegada."
             )
 
     def _elevator_exit_index(self, start_index):
@@ -736,6 +897,16 @@ class DesktopNavigationApp(tk.Tk):
         base = f"nodeID {nodeid} ({name})" if nodeid else name
         return f"{base} - {floor}" if floor else base
 
+    def _navigation_point_name(self, node_id):
+        data = self.graph.nodes[node_id]
+        name = data.get("roomname") or data.get("name") or "ponto intermédio"
+        if data.get("type") == "connection":
+            name = "Ponto de passagem"
+        floor = data.get("floor_key", "")
+        building = data.get("building", "")
+        location = " · ".join(part for part in [building, floor] if part)
+        return f"{name} ({location})" if location else name
+
     def _edge_name(self, edge):
         edge_type = edge.get("edge_type", "")
         if edge_type == "elevator":
@@ -752,12 +923,68 @@ class DesktopNavigationApp(tk.Tk):
         image_path = FLOOR_IMAGES.get(visible_floor)
         axis = self.figure.add_subplot(1, 1, 1)
 
-        if image_path and image_path.exists():
+        if visible_floor == "Exterior":
+            self._draw_exterior_tiles(axis, visible_floor)
+        elif image_path and image_path.exists():
             self._draw_calibrated_image(axis, image_path)
 
         self._draw_graph_axis(axis, route_path, current_index, visible_floor, image_path)
         self.figure.tight_layout()
         self.canvas.draw()
+
+    def _draw_exterior_tiles(self, axis, visible_floor):
+        if self.graph is None:
+            return
+
+        floor_positions = [
+            lonlat_to_web_mercator(data["lat"], data["lon"])
+            for _node_id, data in self.graph.nodes(data=True)
+            if data.get("floor_key") == visible_floor
+        ]
+        if not floor_positions:
+            return
+
+        x_values = [point[0] for point in floor_positions]
+        y_values = [point[1] for point in floor_positions]
+        margin = 90
+        min_x = min(x_values) - margin
+        max_x = max(x_values) + margin
+        min_y = min(y_values) - margin
+        max_y = max(y_values) + margin
+
+        min_tile_x, max_tile_y = web_mercator_to_tile(min_x, min_y, EXTERIOR_TILE_ZOOM)
+        max_tile_x, min_tile_y = web_mercator_to_tile(max_x, max_y, EXTERIOR_TILE_ZOOM)
+
+        for tile_x in range(min_tile_x, max_tile_x + 1):
+            for tile_y in range(min_tile_y, max_tile_y + 1):
+                tile_path = cached_osm_tile(tile_x, tile_y, EXTERIOR_TILE_ZOOM)
+                if tile_path is None:
+                    continue
+
+                image = mpimg.imread(tile_path)
+                extent = tile_web_mercator_extent(tile_x, tile_y, EXTERIOR_TILE_ZOOM)
+                axis.imshow(
+                    image,
+                    origin="upper",
+                    extent=extent,
+                    zorder=0,
+                )
+
+        axis.text(
+            0.01,
+            0.01,
+            "© OpenStreetMap contributors",
+            transform=axis.transAxes,
+            fontsize=8,
+            color="#333333",
+            bbox={
+                "boxstyle": "round,pad=0.2",
+                "facecolor": "white",
+                "edgecolor": "none",
+                "alpha": 0.75,
+            },
+            zorder=10,
+        )
 
     def _draw_calibrated_image(self, axis, image_path: Path):
         image = mpimg.imread(image_path)
