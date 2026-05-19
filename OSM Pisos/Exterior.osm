@@ -1,0 +1,25 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<osm version='0.6' generator='JOSM'>
+  <node id='-27199' action='modify' visible='true' lat='41.28573386426' lon='-7.74321623214' />
+  <node id='-27200' action='modify' visible='true' lat='41.28565777954' lon='-7.74340599842'>
+    <tag k='accessibilty' v='1' />
+    <tag k='building' v='ECT2' />
+    <tag k='floor' v='1' />
+    <tag k='roomname' v='Corredor' />
+    <tag k='type' v='connection' />
+  </node>
+  <node id='-27201' action='modify' visible='true' lat='41.28564870983' lon='-7.74341002174'>
+    <tag k='accessibilty' v='1' />
+    <tag k='building' v='ECT2' />
+    <tag k='floor' v='1' />
+    <tag k='roomname' v='Auditório' />
+    <tag k='type' v='room' />
+  </node>
+  <way id='-1939' action='modify' visible='true'>
+    <nd ref='-27201' />
+    <nd ref='-27200' />
+    <tag k='accessibilty' v='1' />
+    <tag k='bidirrectional' v='true' />
+    <tag k='type' v='connection' />
+  </way>
+</osm>

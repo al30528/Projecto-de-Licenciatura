@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+*.pyo
+
+# Ambientes virtuais
+.venv/
+venv/
+env/
+ENV/
+
+# Distribuição/build
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+
+# Testes, cobertura e caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Jupyter/IPython
+.ipynb_checkpoints/
+
+# VS Code
+.vscode/
+
+# Anaconda/conda
+.conda/
+conda-meta/
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Ficheiros temporários
+*.tmp
+*.temp
+*.log
+*.bak
+*.swp
+~$*
+
+# Ficheiros locais ignorados neste projecto
+Nova pasta/
+Mapa-campus-2022_Locais_Fumo.pdf
+mapa-campus-simplificado-3D.pdf
+mapa-do-campus-Congresso.pdf
+WhatsApp Image *.jpeg
+
