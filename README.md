@@ -108,6 +108,7 @@ Na interface é possível:
 - escolher piso de origem e piso de destino;
 - seleccionar origem e destino;
 - calcular a rota;
+- ver a imagem do piso posicionada/rodada segundo a calibração do JOSM/PicLayer;
 - navegar entre pisos através de escadas/elevador quando existem ligações nos dados OSM;
 - confirmar a chegada a cada ponto antes de receber a próxima indicação.
 

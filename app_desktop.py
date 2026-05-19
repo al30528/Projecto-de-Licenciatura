@@ -8,6 +8,7 @@ mantém os ficheiros .osm sem alterações.
 
 from __future__ import annotations
 
+import math
 import tkinter as tk
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,12 +18,12 @@ import networkx as nx
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 from matplotlib import image as mpimg
+from matplotlib.transforms import Affine2D
 
 from navegacao_campus_vscode import (
     BASE_DIR,
     OSM_FILES,
     build_graph,
-    dijkstra,
     get_node_color,
     get_node_label,
     parse_osm,
@@ -214,6 +215,165 @@ def calculate_path(graph, origin, destination, mobility_reduced=False):
     return path, round(distance, 2)
 
 
+def read_piclayer_calibration(image_path: Path):
+    calibration_path = Path(str(image_path) + ".cal")
+    if not calibration_path.exists():
+        return None
+
+    calibration = {}
+    for line in calibration_path.read_text(encoding="utf-8").splitlines():
+        if "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        try:
+            calibration[key] = float(value)
+        except ValueError:
+            continue
+
+    required_keys = {"M00", "M01", "M10", "M11", "POSITION_X", "POSITION_Y"}
+    if not required_keys.issubset(calibration):
+        return None
+
+    return calibration
+
+
+def world_file_path(image_path: Path):
+    candidates = [
+        image_path.with_suffix(".jgw"),
+        image_path.with_suffix(".pgw"),
+        image_path.with_suffix(".jpgw"),
+        image_path.with_suffix(".pngw"),
+    ]
+    return next((path for path in candidates if path.exists()), None)
+
+
+def read_world_file(image_path: Path):
+    path = world_file_path(image_path)
+    if path is None:
+        return None
+
+    values = [
+        float(line.strip())
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    if len(values) != 6:
+        return None
+
+    return {
+        "path": path,
+        "a": values[0],
+        "d": values[1],
+        "b": values[2],
+        "e": values[3],
+        "c": values[4],
+        "f": values[5],
+    }
+
+
+def lonlat_to_web_mercator(lat: float, lon: float):
+    earth_radius = 6378137
+    x_value = earth_radius * math.radians(lon)
+    y_value = earth_radius * math.log(math.tan(math.pi / 4 + math.radians(lat) / 2))
+    return x_value, y_value
+
+
+def image_pixel_to_world_from_world_file(world_file: dict):
+    return Affine2D().from_values(
+        world_file["a"],
+        world_file["d"],
+        world_file["b"],
+        world_file["e"],
+        world_file["c"],
+        world_file["f"],
+    )
+
+
+def image_pixel_to_world_transform(calibration: dict, image_shape):
+    height, width = image_shape[:2]
+    scale = (calibration.get("INITIAL_SCALE", 100.0) or 100.0) / 100.0
+    m00 = calibration["M00"] * scale
+    m01 = calibration["M01"] * scale
+    m02 = calibration.get("M02", 0.0) * scale
+    m10 = calibration["M10"] * scale
+    m11 = calibration["M11"] * scale
+    m12 = calibration.get("M12", 0.0) * scale
+    offset_x = (
+        calibration["POSITION_X"]
+        + m02
+        - m00 * width / 2
+        - m01 * height / 2
+    )
+    offset_y = (
+        calibration["POSITION_Y"]
+        + m12
+        - m10 * width / 2
+        - m11 * height / 2
+    )
+    return Affine2D().from_values(
+        m00,
+        m10,
+        m01,
+        m11,
+        offset_x,
+        offset_y,
+    )
+
+
+def pixel_to_world(calibration: dict, image_shape, pixel_x: float, pixel_y: float):
+    height, width = image_shape[:2]
+    scale = (calibration.get("INITIAL_SCALE", 100.0) or 100.0) / 100.0
+    m00 = calibration["M00"] * scale
+    m01 = calibration["M01"] * scale
+    m02 = calibration.get("M02", 0.0) * scale
+    m10 = calibration["M10"] * scale
+    m11 = calibration["M11"] * scale
+    m12 = calibration.get("M12", 0.0) * scale
+    relative_x = pixel_x - width / 2
+    relative_y = pixel_y - height / 2
+    world_x = (
+        calibration["POSITION_X"]
+        + m00 * relative_x
+        + m01 * relative_y
+        + m02
+    )
+    world_y = (
+        calibration["POSITION_Y"]
+        + m10 * relative_x
+        + m11 * relative_y
+        + m12
+    )
+    return world_x, world_y
+
+
+def image_world_corners(calibration: dict, image_shape):
+    height, width = image_shape[:2]
+    return [
+        pixel_to_world(calibration, image_shape, 0, 0),
+        pixel_to_world(calibration, image_shape, width, 0),
+        pixel_to_world(calibration, image_shape, width, height),
+        pixel_to_world(calibration, image_shape, 0, height),
+    ]
+
+
+def world_file_corners(world_file: dict, image_shape):
+    height, width = image_shape[:2]
+
+    def transform(pixel_x, pixel_y):
+        return (
+            world_file["a"] * pixel_x + world_file["b"] * pixel_y + world_file["c"],
+            world_file["d"] * pixel_x + world_file["e"] * pixel_y + world_file["f"],
+        )
+
+    return [
+        transform(0, 0),
+        transform(width, 0),
+        transform(width, height),
+        transform(0, height),
+    ]
+
+
 class DesktopNavigationApp(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -234,6 +394,7 @@ class DesktopNavigationApp(tk.Tk):
         self.destination_var = tk.StringVar()
         self.status_var = tk.StringVar(value="Escolhe o piso, a origem e o destino.")
         self.step_var = tk.StringVar(value="Ainda não há rota calculada.")
+        self.show_labels_var = tk.BooleanVar(value=False)
 
         self._build_layout()
         self.load_campus()
@@ -320,23 +481,30 @@ class DesktopNavigationApp(tk.Tk):
         self.visible_floor_combo.grid(row=16, column=0, sticky="ew", pady=(4, 12))
         self.visible_floor_combo.bind("<<ComboboxSelected>>", lambda _event: self.draw_map())
 
-        ttk.Label(sidebar, text="Navegação").grid(row=17, column=0, sticky="w")
+        ttk.Checkbutton(
+            sidebar,
+            text="Mostrar labels no grafo",
+            variable=self.show_labels_var,
+            command=self.draw_map,
+        ).grid(row=17, column=0, sticky="w", pady=(0, 12))
+
+        ttk.Label(sidebar, text="Navegação").grid(row=18, column=0, sticky="w")
         step_label = ttk.Label(
             sidebar,
             textvariable=self.step_var,
             wraplength=280,
             justify="left",
         )
-        step_label.grid(row=18, column=0, sticky="ew", pady=(6, 12))
+        step_label.grid(row=19, column=0, sticky="ew", pady=(6, 12))
 
-        ttk.Label(sidebar, text="Estado").grid(row=19, column=0, sticky="w")
+        ttk.Label(sidebar, text="Estado").grid(row=20, column=0, sticky="w")
         status_label = ttk.Label(
             sidebar,
             textvariable=self.status_var,
             wraplength=280,
             justify="left",
         )
-        status_label.grid(row=20, column=0, sticky="ew", pady=(6, 0))
+        status_label.grid(row=21, column=0, sticky="ew", pady=(6, 0))
 
         main_area = ttk.Frame(self, padding=(0, 10, 10, 10))
         main_area.grid(row=0, column=1, sticky="nsew")
@@ -394,7 +562,10 @@ class DesktopNavigationApp(tk.Tk):
             name = data.get("roomname") or data.get("name")
             nodeid = str(data.get("nodeid", "")).strip()
             floor = data.get("floor_key", "")
+            node_type = data.get("type")
             if not name:
+                continue
+            if node_type == "connection":
                 continue
 
             prefix = f"{nodeid} - " if nodeid else ""
@@ -404,6 +575,7 @@ class DesktopNavigationApp(tk.Tk):
                     "nodeid": nodeid,
                     "name": name,
                     "floor": floor,
+                    "type": node_type,
                     "label": f"{prefix}{name}",
                 }
             )
@@ -475,11 +647,31 @@ class DesktopNavigationApp(tk.Tk):
             self.step_var.set("Chegaste ao destino.")
             return
 
-        self.route.current_index += 1
+        self.route.current_index = self._next_navigation_index()
         current = self.route.path[self.route.current_index]
         self.visible_floor_var.set(self.graph.nodes[current].get("floor_key", self.visible_floor_var.get()))
         self._update_step_text()
         self.draw_map()
+
+    def _next_navigation_index(self):
+        if self.route is None:
+            return 0
+
+        path = self.route.path
+        index = self.route.current_index
+        if index >= len(path) - 1:
+            return index
+
+        edge = self.graph[path[index]][path[index + 1]]
+        if edge.get("vertical") and edge.get("edge_type") == "elevator":
+            while index < len(path) - 1:
+                next_edge = self.graph[path[index]][path[index + 1]]
+                if not next_edge.get("vertical") or next_edge.get("edge_type") != "elevator":
+                    break
+                index += 1
+            return index
+
+        return index + 1
 
     def _update_step_text(self):
         if self.route is None:
@@ -499,12 +691,22 @@ class DesktopNavigationApp(tk.Tk):
         next_node = path[index + 1]
         edge = self.graph[current][next_node]
         if edge.get("vertical"):
-            self.step_var.set(
-                f"Estás em {self._node_display_name(current)}.\n"
-                f"Usa {self._edge_name(edge)} para ir para "
-                f"{self._node_display_name(next_node)}.\n"
-                "Quando chegares ao novo piso, confirma para receber a próxima indicação."
-            )
+            if edge.get("edge_type") == "elevator":
+                exit_index = self._elevator_exit_index(index)
+                exit_node = path[exit_index]
+                self.step_var.set(
+                    f"Estás em {self._node_display_name(current)}.\n"
+                    f"Usa o elevador para ir directamente para "
+                    f"{self._node_display_name(exit_node)}.\n"
+                    "Quando saíres do elevador, confirma para receber a próxima indicação."
+                )
+            else:
+                self.step_var.set(
+                    f"Estás em {self._node_display_name(current)}.\n"
+                    f"Usa {self._edge_name(edge)} para ir para "
+                    f"{self._node_display_name(next_node)}.\n"
+                    "Quando chegares ao novo piso, confirma para receber a próxima indicação."
+                )
         else:
             self.step_var.set(
                 f"Estás em {self._node_display_name(current)}.\n"
@@ -512,6 +714,19 @@ class DesktopNavigationApp(tk.Tk):
                 f"Distância deste passo: {edge.get('length', edge.get('weight', 0)):.1f} m.\n"
                 "Quando lá chegares, confirma para receber a próxima indicação."
             )
+
+    def _elevator_exit_index(self, start_index):
+        if self.route is None:
+            return start_index
+
+        path = self.route.path
+        index = start_index
+        while index < len(path) - 1:
+            edge = self.graph[path[index]][path[index + 1]]
+            if not edge.get("vertical") or edge.get("edge_type") != "elevator":
+                break
+            index += 1
+        return index
 
     def _node_display_name(self, node_id):
         data = self.graph.nodes[node_id]
@@ -535,22 +750,48 @@ class DesktopNavigationApp(tk.Tk):
         current_index = self.route.current_index if self.route else None
         visible_floor = self.visible_floor_var.get()
         image_path = FLOOR_IMAGES.get(visible_floor)
+        axis = self.figure.add_subplot(1, 1, 1)
 
         if image_path and image_path.exists():
-            image_axis = self.figure.add_subplot(1, 2, 1)
-            image_axis.imshow(mpimg.imread(image_path))
-            image_axis.set_title("Mapa do piso")
-            image_axis.axis("off")
+            self._draw_calibrated_image(axis, image_path)
 
-            graph_axis = self.figure.add_subplot(1, 2, 2)
-        else:
-            graph_axis = self.figure.add_subplot(1, 1, 1)
-
-        self._draw_graph_axis(graph_axis, route_path, current_index, visible_floor)
+        self._draw_graph_axis(axis, route_path, current_index, visible_floor, image_path)
         self.figure.tight_layout()
         self.canvas.draw()
 
-    def _draw_graph_axis(self, axis, path=None, current_index=None, visible_floor=None):
+    def _draw_calibrated_image(self, axis, image_path: Path):
+        image = mpimg.imread(image_path)
+        world_file = read_world_file(image_path)
+        if world_file is not None:
+            height, width = image.shape[:2]
+            transform = image_pixel_to_world_from_world_file(world_file)
+            axis.imshow(
+                image,
+                origin="upper",
+                extent=(0, width, height, 0),
+                transform=transform + axis.transData,
+                zorder=0,
+            )
+            return world_file, image.shape
+
+        calibration = read_piclayer_calibration(image_path)
+        if calibration is None:
+            axis.imshow(image)
+            axis.axis("off")
+            return None
+
+        height, width = image.shape[:2]
+        transform = image_pixel_to_world_transform(calibration, image.shape)
+        axis.imshow(
+            image,
+            origin="upper",
+            extent=(0, width, height, 0),
+            transform=transform + axis.transData,
+            zorder=0,
+        )
+        return calibration, image.shape
+
+    def _draw_graph_axis(self, axis, path=None, current_index=None, visible_floor=None, image_path=None):
         if self.graph is None:
             return
 
@@ -561,7 +802,7 @@ class DesktopNavigationApp(tk.Tk):
         ]
         floor_node_set = set(floor_nodes)
         pos = {
-            node_id: (data["lon"], data["lat"])
+            node_id: lonlat_to_web_mercator(data["lat"], data["lon"])
             for node_id, data in self.graph.nodes(data=True)
             if node_id in floor_node_set
         }
@@ -571,30 +812,45 @@ class DesktopNavigationApp(tk.Tk):
                 continue
             x_values = [pos[node_a][0], pos[node_b][0]]
             y_values = [pos[node_a][1], pos[node_b][1]]
-            axis.plot(x_values, y_values, color="#b8b8b8", linewidth=1.0, zorder=1)
+            axis.plot(x_values, y_values, color="#424242", linewidth=1.2, alpha=0.75, zorder=1)
 
         for node_id, (x_value, y_value) in pos.items():
             color = get_node_color(self.graph, node_id)
             size = 18
-            axis.scatter(x_value, y_value, s=size, color=color, zorder=2)
-
-        labeled_nodes = [
-            node_id
-            for node_id, data in self.graph.nodes(data=True)
-            if node_id in floor_node_set and (data.get("roomname") or data.get("name"))
-        ]
-        for node_id in labeled_nodes:
-            x_value, y_value = pos[node_id]
-            axis.text(
+            axis.scatter(
                 x_value,
                 y_value,
-                get_node_label(self.graph, node_id, show_nodeid=True),
-                fontsize=7,
-                ha="center",
-                va="bottom",
-                color="#222222",
-                zorder=3,
+                s=size,
+                color=color,
+                edgecolor="white",
+                linewidth=0.6,
+                zorder=2,
             )
+
+        if self.show_labels_var.get():
+            labeled_nodes = [
+                node_id
+                for node_id, data in self.graph.nodes(data=True)
+                if node_id in floor_node_set and (data.get("roomname") or data.get("name"))
+            ]
+            for node_id in labeled_nodes:
+                x_value, y_value = pos[node_id]
+                axis.text(
+                    x_value,
+                    y_value,
+                    get_node_label(self.graph, node_id, show_nodeid=True),
+                    fontsize=7,
+                    ha="center",
+                    va="bottom",
+                    color="#111111",
+                    zorder=3,
+                    bbox={
+                        "boxstyle": "round,pad=0.15",
+                        "facecolor": "white",
+                        "edgecolor": "none",
+                        "alpha": 0.65,
+                    },
+                )
 
         if path and len(path) > 1:
             for index in range(len(path) - 1):
@@ -623,12 +879,30 @@ class DesktopNavigationApp(tk.Tk):
                 if current in floor_node_set:
                     axis.scatter(*pos[current], s=150, color="#fbc02d", edgecolor="black", zorder=6)
 
-        axis.set_title(f"Grafo e rota - {visible_floor}")
-        axis.set_xlabel("Longitude")
-        axis.set_ylabel("Latitude")
-        axis.tick_params(labelsize=8)
-        axis.set_aspect("equal", adjustable="datalim")
-        axis.grid(True, color="#eeeeee")
+        axis.set_title(f"Mapa calibrado e rota - {visible_floor}")
+        axis.set_aspect("equal", adjustable="box")
+        self._set_map_limits(axis, pos, image_path)
+        axis.axis("off")
+
+    def _set_map_limits(self, axis, positions, image_path):
+        points = list(positions.values())
+        if image_path and image_path.exists():
+            world_file = read_world_file(image_path)
+            if world_file is not None:
+                image = mpimg.imread(image_path)
+                points.extend(world_file_corners(world_file, image.shape))
+
+        if not points:
+            return
+
+        x_values = [point[0] for point in points]
+        y_values = [point[1] for point in points]
+        width = max(x_values) - min(x_values)
+        height = max(y_values) - min(y_values)
+        margin_x = width * 0.18 if width else 1
+        margin_y = height * 0.18 if height else 1
+        axis.set_xlim(min(x_values) - margin_x, max(x_values) + margin_x)
+        axis.set_ylim(min(y_values) - margin_y, max(y_values) + margin_y)
 
 
 def main():
