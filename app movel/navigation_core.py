@@ -106,6 +106,8 @@ def parse_osm(filepath: Path):
 
 
 def haversine(lat1, lon1, lat2, lon2):
+    """Calcula a distância aproximada em metros entre duas coordenadas GPS."""
+
     radius = 6371000
     phi1 = math.radians(lat1)
     phi2 = math.radians(lat2)
@@ -119,6 +121,14 @@ def haversine(lat1, lon1, lat2, lon2):
 
 
 def build_graph(nodes, edges):
+    """
+    Constrói o grafo de um ficheiro OSM.
+
+    Cada nó OSM vira um nó NetworkX. Cada ligação entre dois nós consecutivos
+    de um way vira uma aresta com `weight` igual à distância em metros. Esse
+    `weight` é o valor que o Dijkstra soma para escolher a rota mais curta.
+    """
+
     graph = nx.Graph()
 
     for node_id, data in nodes.items():
@@ -133,6 +143,9 @@ def build_graph(nodes, edges):
         if node_a not in nodes or node_b not in nodes:
             continue
 
+        # Haversine usa latitude/longitude para estimar a distância real entre
+        # os dois pontos. Em corredores e caminhos curtos é suficiente para
+        # comparar alternativas e apresentar metros ao utilizador.
         distance = haversine(
             nodes[node_a]["lat"],
             nodes[node_a]["lon"],
@@ -142,7 +155,9 @@ def build_graph(nodes, edges):
         graph.add_edge(
             node_a,
             node_b,
+            # `weight` é o custo usado pelo algoritmo de caminho mais curto.
             weight=distance,
+            # `length` é o mesmo valor arredondado para as instruções visuais.
             length=round(distance, 2),
             way_id=way_id,
             edge_type=way_tags.get("type", "connection"),
@@ -166,6 +181,16 @@ def floor_node_id(floor: str, node_id: str) -> str:
 
 
 def vertical_edge_weight(from_node: dict, to_node: dict, edge_type: str) -> float:
+    """
+    Define o custo artificial para mudar de piso.
+
+    A distância horizontal entre dois nós de pisos diferentes não representa bem
+    o esforço de subir/descer. Por isso, escadas e elevador recebem um custo por
+    piso que entra no mesmo campo `weight` usado pelo Dijkstra:
+    - elevador: 8 unidades por piso;
+    - escadas: 12 unidades por piso.
+    """
+
     first_floor = int(from_node.get("floor", 0) or 0)
     second_floor = int(to_node.get("floor", 0) or 0)
     floor_delta = max(1, abs(first_floor - second_floor))
@@ -173,6 +198,14 @@ def vertical_edge_weight(from_node: dict, to_node: dict, edge_type: str) -> floa
 
 
 def build_campus_graph():
+    """
+    Junta exterior e pisos interiores num único grafo navegável.
+
+    Os IDs originais dos nós podem repetir-se entre ficheiros OSM. Por isso cada
+    nó recebe um prefixo com o piso, por exemplo `Piso1:12`, antes de entrar no
+    grafo global.
+    """
+
     campus_graph = nx.Graph()
     floor_graphs = {}
 
@@ -265,6 +298,8 @@ def transition_labels(data: dict):
 def add_vertical_edge(campus_graph, node_a, data_a, node_b, data_b, edge_type):
     accessibility = 3 if edge_type == "elevator" else 2
     weight = vertical_edge_weight(data_a, data_b, edge_type)
+    # Nas ligações verticais, `weight` e `length` usam o mesmo custo artificial.
+    # Isto permite ao Dijkstra comparar escadas/elevador com o resto do caminho.
     campus_graph.add_edge(
         node_a,
         node_b,
@@ -278,11 +313,15 @@ def add_vertical_edge(campus_graph, node_a, data_a, node_b, data_b, edge_type):
 
 
 def add_transition_edge(campus_graph, node_a, data_a, node_b, data_b, edge_type):
+    # As transições entre exterior e interior são medidas em Web Mercator para
+    # ficarem no mesmo sistema de coordenadas usado no desenho dos mapas.
     distance = math.dist(
         lonlat_to_web_mercator(data_a["lat"], data_a["lon"]),
         lonlat_to_web_mercator(data_b["lat"], data_b["lon"]),
     )
     accessibility = 3 if edge_type == "elevator" else 2 if edge_type == "stairs" else 4
+    # `weight` guarda a distância/custo completo usado pelo Dijkstra.
+    # `length` é arredondado para aparecer de forma limpa nas instruções.
     campus_graph.add_edge(
         node_a,
         node_b,
@@ -297,6 +336,18 @@ def add_transition_edge(campus_graph, node_a, data_a, node_b, data_b, edge_type)
 
 
 def calculate_path(graph, origin, destination, mobility_reduced=False):
+    """
+    Calcula a rota entre origem e destino com Dijkstra via NetworkX.
+
+    `nx.shortest_path(..., weight="weight")` procura o caminho cuja soma dos
+    pesos das arestas é menor. Esses pesos vêm das distâncias Haversine nos
+    corredores/caminhos, das distâncias Web Mercator nas transições, e dos custos
+    artificiais nas escadas/elevador.
+    """
+
+    # Criamos um grafo filtrado antes de calcular a rota:
+    # - mobilidade reduzida não pode usar escadas;
+    # - utilizador normal não usa elevador.
     route_graph = nx.Graph()
     route_graph.add_nodes_from(graph.nodes(data=True))
     for node_a, node_b, data in graph.edges(data=True):
@@ -308,7 +359,9 @@ def calculate_path(graph, origin, destination, mobility_reduced=False):
         route_graph.add_edge(node_a, node_b, **data)
 
     try:
+        # Lista de nós da rota escolhida por Dijkstra.
         path = nx.shortest_path(route_graph, origin, destination, weight="weight")
+        # Soma dos `weight` ao longo da rota. É a distância/custo total mostrado.
         distance = nx.shortest_path_length(route_graph, origin, destination, weight="weight")
     except (nx.NetworkXNoPath, nx.NodeNotFound):
         return None, float("inf")
