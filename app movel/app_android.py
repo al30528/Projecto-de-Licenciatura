@@ -39,6 +39,8 @@ class Surface(BoxLayout):
         self.bind(pos=self._update_background, size=self._update_background)
 
     def _update_background(self, *_args):
+        """Mantém o retângulo de fundo alinhado com o tamanho do painel."""
+
         self._background_rect.pos = self.pos
         self._background_rect.size = self.size
 
@@ -57,9 +59,13 @@ class GraphMapWidget(Widget):
         self.bind(pos=self._on_geometry_change, size=self._on_geometry_change)
 
     def _on_geometry_change(self, *_args):
+        """Redesenha o mapa quando o widget muda de posição ou tamanho."""
+
         self.redraw()
 
     def set_state(self, graph, visible_floor, route=None, show_labels=False):
+        """Recebe o estado atual da app e dispara novo desenho do mapa."""
+
         self.graph = graph
         self.visible_floor = visible_floor
         self.route = route
@@ -67,6 +73,8 @@ class GraphMapWidget(Widget):
         self.redraw()
 
     def redraw(self):
+        """Limpa o canvas e desenha mapa, grafo, rota e labels do piso visível."""
+
         self.canvas.clear()
         with self.canvas:
             Color(0.96, 0.97, 0.98, 1)
@@ -86,6 +94,8 @@ class GraphMapWidget(Widget):
             return
 
         floor_node_set = set(floor_nodes)
+        # As coordenadas OSM vêm em latitude/longitude. Para desenhar todos os
+        # mapas no mesmo sistema, convertemos para Web Mercator.
         positions = {
             node_id: nav.lonlat_to_web_mercator(data["lat"], data["lon"])
             for node_id, data in self.graph.nodes(data=True)
@@ -94,6 +104,8 @@ class GraphMapWidget(Widget):
         image_path, image_corners = self._floor_image_corners()
         tile_extents = self._exterior_tile_extents(positions)
         tile_points = self._extent_points(tile_extents)
+        # A escala do ecrã é calculada com todos os pontos relevantes: nós do
+        # grafo, cantos da imagem calibrada e tiles do exterior.
         points = list(positions.values()) + image_corners + tile_points
         world_to_screen = self._world_to_screen_factory(points)
         if world_to_screen is None:
@@ -114,7 +126,10 @@ class GraphMapWidget(Widget):
             self._draw_labels(floor_node_set, positions, world_to_screen)
         if self.visible_floor == "Exterior":
             self._draw_osm_attribution()
+
     def _floor_image_corners(self):
+        """Obtém a imagem calibrada do piso e os seus cantos no mundo real."""
+
         image_path = nav.FLOOR_IMAGES.get(self.visible_floor)
         if not image_path or not image_path.exists():
             return None, []
@@ -127,6 +142,8 @@ class GraphMapWidget(Widget):
         return image_path, nav.world_file_corners(world_file, texture.size)
 
     def _texture_for(self, image_path):
+        """Carrega e guarda texturas Kivy para não reler a mesma imagem várias vezes."""
+
         key = str(image_path)
         if key not in self._texture_cache:
             try:
@@ -136,6 +153,8 @@ class GraphMapWidget(Widget):
         return self._texture_cache[key]
 
     def _world_to_screen_factory(self, points):
+        """Cria uma função que transforma coordenadas do mapa em píxeis no ecrã."""
+
         if not points:
             return None
 
@@ -158,6 +177,8 @@ class GraphMapWidget(Widget):
         return world_to_screen
 
     def _draw_floor_image(self, image_path, corners, world_to_screen):
+        """Desenha uma imagem calibrada do piso como malha de quatro cantos."""
+
         texture = self._texture_for(image_path)
         if texture is None:
             return
@@ -177,6 +198,8 @@ class GraphMapWidget(Widget):
         )
 
     def _exterior_tile_extents(self, positions):
+        """Calcula que tiles OpenStreetMap são necessários para cobrir o exterior."""
+
         if self.visible_floor != "Exterior" or not positions:
             return []
 
@@ -204,6 +227,8 @@ class GraphMapWidget(Widget):
         return extents
 
     def _extent_points(self, tile_extents):
+        """Transforma caixas de tiles em pontos usados para calcular o enquadramento."""
+
         points = []
         for _tile_x, _tile_y, extent in tile_extents:
             min_x, max_x, min_y, max_y = extent
@@ -211,6 +236,8 @@ class GraphMapWidget(Widget):
         return points
 
     def _draw_osm_tiles(self, tile_extents, world_to_screen):
+        """Desenha os tiles OpenStreetMap do exterior no canvas."""
+
         for tile_x, tile_y, extent in tile_extents:
             tile_path = self._cached_osm_tile(tile_x, tile_y, nav.EXTERIOR_TILE_ZOOM)
             if tile_path is None:
@@ -231,6 +258,8 @@ class GraphMapWidget(Widget):
             )
 
     def _cached_osm_tile(self, tile_x: int, tile_y: int, zoom: int):
+        """Obtém um tile do cache local ou descarrega-o da API pública OSM."""
+
         tile_path = self.tile_cache_dir / str(zoom) / str(tile_x) / f"{tile_y}.png"
         if tile_path.exists():
             return tile_path
@@ -250,15 +279,21 @@ class GraphMapWidget(Widget):
         return tile_path
 
     def _draw_edges(self, floor_node_set, positions, world_to_screen):
+        """Desenha as arestas normais do grafo no piso visível."""
+
         Color(0.18, 0.19, 0.20, 0.65)
         for node_a, node_b, data in self.graph.edges(data=True):
             if data.get("vertical") or node_a not in floor_node_set or node_b not in floor_node_set:
                 continue
+            # Arestas verticais ligam pisos diferentes e por isso entram no
+            # cálculo da rota, mas não são desenhadas como linha neste piso.
             x1, y1 = world_to_screen(positions[node_a])
             x2, y2 = world_to_screen(positions[node_b])
             Line(points=[x1, y1, x2, y2], width=dp(1.1))
 
     def _draw_route(self, floor_node_set, positions, world_to_screen):
+        """Desenha a rota atual, destacando progresso, origem, destino e ponto atual."""
+
         if self.route is None or len(self.route.path) < 2:
             return
 
@@ -268,6 +303,7 @@ class GraphMapWidget(Widget):
             if node_a not in floor_node_set or node_b not in floor_node_set:
                 continue
 
+            # Verde: segmento já confirmado. Vermelho: segmento ainda por fazer.
             color = "#43A047" if index < self.route.current_index else "#D32F2F"
             Color(*get_color_from_hex(color))
             x1, y1 = world_to_screen(positions[node_a])
@@ -285,6 +321,8 @@ class GraphMapWidget(Widget):
             self._draw_marker(world_to_screen(positions[current]), "#FBC02D", dp(11))
 
     def _draw_nodes(self, positions, world_to_screen):
+        """Desenha todos os nós do piso visível com a cor definida no core."""
+
         for node_id, point in positions.items():
             self._draw_marker(
                 world_to_screen(point),
@@ -293,12 +331,16 @@ class GraphMapWidget(Widget):
             )
 
     def _draw_marker(self, point, color, radius):
+        """Desenha um círculo com contorno branco para representar um nó/marcador."""
+
         Color(*get_color_from_hex(color))
         Ellipse(pos=(point[0] - radius, point[1] - radius), size=(radius * 2, radius * 2))
         Color(1, 1, 1, 0.85)
         Line(circle=(point[0], point[1], radius), width=dp(0.8))
 
     def _draw_labels(self, floor_node_set, positions, world_to_screen):
+        """Desenha labels opcionais dos nós quando o utilizador ativa a checkbox."""
+
         for node_id, point in positions.items():
             if node_id not in floor_node_set:
                 continue
@@ -309,9 +351,13 @@ class GraphMapWidget(Widget):
             self._draw_text(nav.node_label(self.graph, node_id, show_nodeid=True), x_value, y_value + dp(8))
 
     def _draw_center_text(self, text):
+        """Mostra uma mensagem centrada quando não há mapa ou dados disponíveis."""
+
         self._draw_text(text, self.center_x, self.center_y)
 
     def _draw_text(self, text, x_value, y_value):
+        """Desenha texto no canvas usando CoreLabel, com fundo branco discreto."""
+
         label = CoreLabel(text=text, font_size=sp(11), color=(0.04, 0.04, 0.04, 1))
         label.refresh()
         texture = label.texture
@@ -330,6 +376,8 @@ class GraphMapWidget(Widget):
             )
 
     def _draw_osm_attribution(self):
+        """Mostra a atribuição obrigatória dos tiles OpenStreetMap."""
+
         label = CoreLabel(
             text="© OpenStreetMap contributors",
             font_size=sp(10),
@@ -351,9 +399,13 @@ class GraphMapWidget(Widget):
 
 
 class _LegacyAndroidNavigationApp(App):
+    """Primeira versão da app num único ecrã, mantida como referência."""
+
     title = "Navegação UTAD"
 
     def build(self):
+        """Monta a interface antiga: controlos, mapa, instruções e botões."""
+
         self.graph = None
         self.floor_graphs = {}
         self.selectable_nodes = []
@@ -407,6 +459,8 @@ class _LegacyAndroidNavigationApp(App):
         return root
 
     def _build_controls(self):
+        """Cria os controlos antigos de perfil, origem, destino e piso visível."""
+
         scroll = ScrollView(size_hint_y=None, height=dp(284), do_scroll_x=False)
         grid = GridLayout(cols=2, spacing=dp(6), size_hint_y=None)
         grid.bind(minimum_height=grid.setter("height"))
@@ -445,6 +499,8 @@ class _LegacyAndroidNavigationApp(App):
         return scroll
 
     def _add_spinner(self, parent, label_text, values, text):
+        """Adiciona uma label e uma Spinner ao layout indicado."""
+
         parent.add_widget(Label(text=label_text, halign="left", size_hint_y=None, height=dp(38)))
         spinner = Spinner(
             text=text or "-",
@@ -456,9 +512,13 @@ class _LegacyAndroidNavigationApp(App):
         return spinner
 
     def _fit_label_height(self, instance, texture_size):
+        """Ajusta a altura de uma label ao texto que ela contém."""
+
         instance.height = max(dp(112), texture_size[1] + dp(18))
 
     def load_campus(self):
+        """Carrega os grafos OSM e prepara as listas de pontos selecionáveis."""
+
         try:
             self.graph, self.floor_graphs = nav.build_campus_graph()
             self.selectable_nodes = nav.collect_selectable_nodes(self.graph)
@@ -472,6 +532,8 @@ class _LegacyAndroidNavigationApp(App):
         self.refresh_map()
 
     def on_selection_changed(self):
+        """Reage a alterações nas spinners e atualiza listas/mapa."""
+
         if self._refreshing_options:
             return
         if not self.selectable_nodes:
@@ -482,6 +544,8 @@ class _LegacyAndroidNavigationApp(App):
         self.refresh_map()
 
     def refresh_option_lists(self, force_defaults=False):
+        """Atualiza edifícios, pisos e pontos disponíveis nos controlos antigos."""
+
         self._refreshing_options = True
         try:
             buildings = nav.available_buildings(self.selectable_nodes)
@@ -522,6 +586,8 @@ class _LegacyAndroidNavigationApp(App):
             self._refreshing_options = False
 
     def _refresh_floor_spinner(self, building_spinner, floor_spinner, force_defaults):
+        """Mostra apenas pisos existentes para o edifício selecionado."""
+
         floors = nav.available_floors(self.selectable_nodes, building_spinner.text)
         floor_spinner.disabled = len(floors) <= 1
         default = "Piso1" if "Piso1" in floors else (floors[0] if floors else None)
@@ -535,12 +601,16 @@ class _LegacyAndroidNavigationApp(App):
         force_defaults,
         choose_last,
     ):
+        """Mostra apenas salas/entradas existentes no edifício e piso escolhidos."""
+
         nodes = nav.nodes_for(self.selectable_nodes, building_spinner.text, floor_spinner.text)
         labels = [node.label for node in nodes]
         default = labels[-1] if choose_last and labels else labels[0] if labels else None
         self._set_spinner_values(node_spinner, labels, default, force_defaults)
 
     def _set_spinner_values(self, spinner, values, default=None, force_defaults=False):
+        """Define opções de uma Spinner e escolhe um valor válido."""
+
         spinner.values = values
         if not values:
             spinner.text = "-"
@@ -549,6 +619,8 @@ class _LegacyAndroidNavigationApp(App):
             spinner.text = default if default in values else values[0]
 
     def _set_spinner_text_silently(self, spinner, value):
+        """Altera uma Spinner sem disparar uma cascata de atualizações."""
+
         self._refreshing_options = True
         try:
             spinner.text = value
@@ -556,6 +628,8 @@ class _LegacyAndroidNavigationApp(App):
             self._refreshing_options = False
 
     def calculate_route(self):
+        """Calcula rota na versão antiga e mostra a primeira instrução."""
+
         if self.graph is None:
             self.navigation_label.text = "Os mapas ainda não foram carregados."
             return
@@ -594,6 +668,8 @@ class _LegacyAndroidNavigationApp(App):
         self.refresh_map()
 
     def confirm_arrival(self):
+        """Avança para o próximo ponto da rota na versão antiga."""
+
         if self.route is None:
             self.navigation_label.text = "Calcula primeiro uma rota."
             return
@@ -608,6 +684,8 @@ class _LegacyAndroidNavigationApp(App):
         self.refresh_map()
 
     def refresh_map(self):
+        """Atualiza o GraphMapWidget da interface antiga."""
+
         if not hasattr(self, "map_widget"):
             return
         self.map_widget.set_state(
@@ -619,9 +697,13 @@ class _LegacyAndroidNavigationApp(App):
 
 
 class AndroidNavigationApp(App):
+    """Aplicação Android atual com ecrã de perfil, planeamento e navegação."""
+
     title = "Navegação UTAD"
 
     def build(self):
+        """Inicializa estado global, cria os ecrãs e agenda o carregamento dos mapas."""
+
         self.graph = None
         self.floor_graphs = {}
         self.selectable_nodes = []
@@ -638,6 +720,8 @@ class AndroidNavigationApp(App):
         return self.screen_manager
 
     def _build_profile_screen(self):
+        """Cria o primeiro ecrã, onde o utilizador escolhe o tipo de perfil."""
+
         screen = Screen(name="profile")
         root = BoxLayout(orientation="vertical", spacing=dp(14), padding=dp(22))
         screen.add_widget(root)
@@ -693,6 +777,8 @@ class AndroidNavigationApp(App):
         return screen
 
     def _build_planner_screen(self):
+        """Cria o ecrã de escolha de origem/destino e pré-visualização do mapa."""
+
         screen = Screen(name="planner")
         root = BoxLayout(orientation="vertical", spacing=dp(8), padding=dp(8))
         screen.add_widget(root)
@@ -745,6 +831,8 @@ class AndroidNavigationApp(App):
         return screen
 
     def _build_navigation_screen(self):
+        """Cria o ecrã de navegação passo a passo após calcular uma rota."""
+
         screen = Screen(name="navigation")
         root = BoxLayout(orientation="vertical", spacing=dp(8), padding=dp(8))
         screen.add_widget(root)
@@ -801,6 +889,8 @@ class AndroidNavigationApp(App):
         return screen
 
     def _build_location_controls(self):
+        """Cria os controlos de edifício, piso, sala/entrada e mapa visível."""
+
         scroll = ScrollView(size_hint_y=None, height=dp(250), do_scroll_x=False)
         grid = GridLayout(cols=2, spacing=dp(6), size_hint_y=None)
         grid.bind(minimum_height=grid.setter("height"))
@@ -832,6 +922,8 @@ class AndroidNavigationApp(App):
         return scroll
 
     def _add_spinner(self, parent, label_text, values, text):
+        """Adiciona uma linha de seleção ao formulário da app."""
+
         parent.add_widget(Label(text=label_text, halign="left", size_hint_y=None, height=dp(38)))
         spinner = Spinner(
             text=text or "-",
@@ -843,9 +935,13 @@ class AndroidNavigationApp(App):
         return spinner
 
     def _fit_label_height(self, instance, texture_size):
+        """Ajusta altura de uma label quando o texto ocupa várias linhas."""
+
         instance.height = max(dp(112), texture_size[1] + dp(18))
 
     def load_campus(self):
+        """Carrega o grafo global e os pontos que podem ser escolhidos pelo utilizador."""
+
         try:
             self.graph, self.floor_graphs = nav.build_campus_graph()
             self.selectable_nodes = nav.collect_selectable_nodes(self.graph)
@@ -863,20 +959,28 @@ class AndroidNavigationApp(App):
         self.refresh_maps()
 
     def select_profile(self, profile):
+        """Guarda o perfil escolhido e avança para o ecrã de planeamento."""
+
         self.profile = profile
         self._sync_profile_labels()
         self.screen_manager.current = "planner"
         self.refresh_maps()
 
     def change_profile(self):
+        """Volta ao ecrã inicial para permitir alterar o perfil."""
+
         self.screen_manager.current = "profile"
 
     def _sync_profile_labels(self):
+        """Atualiza textos que mostram o perfil atualmente selecionado."""
+
         profile = self.profile or "por escolher"
         self.planner_profile_label.text = f"Perfil: {profile}"
         self.route_summary_label.text = f"Perfil: {profile}"
 
     def on_selection_changed(self):
+        """Atualiza opções dependentes quando muda edifício, piso ou ponto."""
+
         if self._refreshing_options:
             return
         if not self.selectable_nodes:
@@ -887,6 +991,8 @@ class AndroidNavigationApp(App):
         self.refresh_maps()
 
     def refresh_option_lists(self, force_defaults=False):
+        """Reconstrói as opções das spinners com base no estado atual."""
+
         self._refreshing_options = True
         try:
             buildings = nav.available_buildings(self.selectable_nodes)
@@ -927,6 +1033,8 @@ class AndroidNavigationApp(App):
             self._refreshing_options = False
 
     def _refresh_floor_spinner(self, building_spinner, floor_spinner, force_defaults):
+        """Atualiza a lista de pisos disponíveis para um edifício."""
+
         floors = nav.available_floors(self.selectable_nodes, building_spinner.text)
         floor_spinner.disabled = len(floors) <= 1
         default = "Piso1" if "Piso1" in floors else (floors[0] if floors else None)
@@ -940,12 +1048,16 @@ class AndroidNavigationApp(App):
         force_defaults,
         choose_last,
     ):
+        """Atualiza a lista de salas/entradas para edifício e piso selecionados."""
+
         nodes = nav.nodes_for(self.selectable_nodes, building_spinner.text, floor_spinner.text)
         labels = [node.label for node in nodes]
         default = labels[-1] if choose_last and labels else labels[0] if labels else None
         self._set_spinner_values(node_spinner, labels, default, force_defaults)
 
     def _set_spinner_values(self, spinner, values, default=None, force_defaults=False):
+        """Define opções de uma Spinner sem deixar texto inválido selecionado."""
+
         spinner.values = values
         if not values:
             spinner.text = "-"
@@ -954,6 +1066,8 @@ class AndroidNavigationApp(App):
             spinner.text = default if default in values else values[0]
 
     def _set_spinner_text_silently(self, spinner, value):
+        """Altera uma Spinner evitando recursão nos callbacks de seleção."""
+
         self._refreshing_options = True
         try:
             spinner.text = value
@@ -961,6 +1075,8 @@ class AndroidNavigationApp(App):
             self._refreshing_options = False
 
     def calculate_route(self):
+        """Valida perfil/origem/destino, calcula rota e abre o ecrã de navegação."""
+
         if self.graph is None:
             self.planner_status_label.text = "Os mapas ainda não foram carregados."
             return
@@ -1009,6 +1125,8 @@ class AndroidNavigationApp(App):
         self.refresh_maps()
 
     def confirm_arrival(self):
+        """Avança a rota quando o utilizador confirma que chegou ao ponto indicado."""
+
         if self.route is None:
             self.navigation_label.text = "Calcula primeiro uma rota."
             return
@@ -1026,6 +1144,8 @@ class AndroidNavigationApp(App):
         self.refresh_maps()
 
     def cancel_route(self):
+        """Cancela a navegação atual e regressa ao planeamento."""
+
         self.route = None
         self.navigation_label.text = "Rota cancelada."
         self.planner_status_label.text = "Escolhe a origem e o destino para começar."
@@ -1033,6 +1153,8 @@ class AndroidNavigationApp(App):
         self.refresh_maps()
 
     def refresh_maps(self):
+        """Atualiza o mapa do planeamento e o mapa da navegação."""
+
         show_labels = self.show_labels_checkbox.active if hasattr(self, "show_labels_checkbox") else False
         visible_floor = self.visible_floor_spinner.text if hasattr(self, "visible_floor_spinner") else "Exterior"
         if hasattr(self, "planner_map_widget"):
@@ -1052,6 +1174,8 @@ class AndroidNavigationApp(App):
 
 
 def main():
+    """Ponto de entrada quando o ficheiro é executado diretamente."""
+
     AndroidNavigationApp().run()
 
 
