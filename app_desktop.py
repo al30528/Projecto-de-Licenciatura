@@ -195,19 +195,19 @@ def add_vertical_edge(campus_graph, node_a, data_a, node_b, data_b, edge_type):
 
 
 def calculate_path(graph, origin, destination, mobility_reduced=False):
-    if not mobility_reduced:
-        return dijkstra(graph, origin, destination, accessibility_min=1)
-
-    accessible_graph = nx.Graph()
-    accessible_graph.add_nodes_from(graph.nodes(data=True))
+    route_graph = nx.Graph()
+    route_graph.add_nodes_from(graph.nodes(data=True))
     for node_a, node_b, data in graph.edges(data=True):
-        if data.get("edge_type") == "stairs":
+        edge_type = data.get("edge_type")
+        if mobility_reduced and edge_type == "stairs":
             continue
-        accessible_graph.add_edge(node_a, node_b, **data)
+        if not mobility_reduced and edge_type == "elevator":
+            continue
+        route_graph.add_edge(node_a, node_b, **data)
 
     try:
-        path = nx.shortest_path(accessible_graph, origin, destination, weight="weight")
-        distance = nx.shortest_path_length(accessible_graph, origin, destination, weight="weight")
+        path = nx.shortest_path(route_graph, origin, destination, weight="weight")
+        distance = nx.shortest_path_length(route_graph, origin, destination, weight="weight")
     except (nx.NetworkXNoPath, nx.NodeNotFound):
         return None, float("inf")
 
