@@ -4,11 +4,10 @@
 from __future__ import annotations
 
 import math
+import heapq
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
-
-import networkx as nx
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -37,7 +36,7 @@ EXTERIOR_TILE_ZOOM = 18
 
 @dataclass
 class RouteState:
-    graph: nx.Graph
+    graph: object
     path: list[str]
     distance: float
     current_index: int = 0
@@ -52,6 +51,78 @@ class SelectableNode:
     floor: str
     node_type: str
     label: str
+
+
+class NodeAccessor:
+    """Permite usar `graph.nodes[...]` e `graph.nodes(data=True)` sem NetworkX."""
+
+    def __init__(self, graph):
+        self.graph = graph
+
+    def __call__(self, data=False):
+        return self.graph._nodes.items() if data else self.graph._nodes.keys()
+
+    def __getitem__(self, node_id):
+        return self.graph._nodes[node_id]
+
+    def __contains__(self, node_id):
+        return node_id in self.graph._nodes
+
+    def __iter__(self):
+        return iter(self.graph._nodes)
+
+
+class EdgeAccessor:
+    """Permite usar `graph.edges(data=True)` como no NetworkX."""
+
+    def __init__(self, graph):
+        self.graph = graph
+
+    def __call__(self, data=False):
+        seen = set()
+        for node_a, neighbors in self.graph._adj.items():
+            for node_b, edge_data in neighbors.items():
+                key = tuple(sorted((node_a, node_b)))
+                if key in seen:
+                    continue
+                seen.add(key)
+                yield (node_a, node_b, edge_data) if data else (node_a, node_b)
+
+
+class SimpleGraph:
+    """
+    Grafo não dirigido mínimo para Android.
+
+    A app desktop usa NetworkX, mas no APK o NetworkX trouxe uma dependência
+    nativa (`_bz2`) que não estava disponível. Esta classe implementa só as
+    operações necessárias: adicionar nós/arestas, iterar nós/arestas, consultar
+    vizinhos e aceder a `graph[a][b]`.
+    """
+
+    def __init__(self):
+        self._nodes = {}
+        self._adj = {}
+        self.nodes = NodeAccessor(self)
+        self.edges = EdgeAccessor(self)
+
+    def add_node(self, node_id, **data):
+        self._nodes.setdefault(node_id, {}).update(data)
+        self._adj.setdefault(node_id, {})
+
+    def add_edge(self, node_a, node_b, **data):
+        self._adj.setdefault(node_a, {})
+        self._adj.setdefault(node_b, {})
+        self._adj[node_a][node_b] = data
+        self._adj[node_b][node_a] = data
+
+    def has_edge(self, node_a, node_b):
+        return node_b in self._adj.get(node_a, {})
+
+    def neighbors(self, node_id):
+        return self._adj.get(node_id, {}).keys()
+
+    def __getitem__(self, node_id):
+        return self._adj[node_id]
 
 
 def read_int_tag(tags: dict[str, str], keys: tuple[str, ...], default: int) -> int:
@@ -124,12 +195,12 @@ def build_graph(nodes, edges):
     """
     Constrói o grafo de um ficheiro OSM.
 
-    Cada nó OSM vira um nó NetworkX. Cada ligação entre dois nós consecutivos
+    Cada nó OSM vira um nó do grafo. Cada ligação entre dois nós consecutivos
     de um way vira uma aresta com `weight` igual à distância em metros. Esse
     `weight` é o valor que o Dijkstra soma para escolher a rota mais curta.
     """
 
-    graph = nx.Graph()
+    graph = SimpleGraph()
 
     for node_id, data in nodes.items():
         graph.add_node(
@@ -206,7 +277,7 @@ def build_campus_graph():
     grafo global.
     """
 
-    campus_graph = nx.Graph()
+    campus_graph = SimpleGraph()
     floor_graphs = {}
 
     for floor in APP_FLOORS:
@@ -337,36 +408,60 @@ def add_transition_edge(campus_graph, node_a, data_a, node_b, data_b, edge_type)
 
 def calculate_path(graph, origin, destination, mobility_reduced=False):
     """
-    Calcula a rota entre origem e destino com Dijkstra via NetworkX.
+    Calcula a rota entre origem e destino com Dijkstra.
 
-    `nx.shortest_path(..., weight="weight")` procura o caminho cuja soma dos
-    pesos das arestas é menor. Esses pesos vêm das distâncias Haversine nos
-    corredores/caminhos, das distâncias Web Mercator nas transições, e dos custos
-    artificiais nas escadas/elevador.
+    O algoritmo procura o caminho cuja soma dos `weight` das arestas é menor.
+    Esses pesos vêm das distâncias Haversine nos corredores/caminhos, das
+    distâncias Web Mercator nas transições, e dos custos artificiais nas
+    escadas/elevador.
     """
 
-    # Criamos um grafo filtrado antes de calcular a rota:
-    # - mobilidade reduzida não pode usar escadas;
-    # - utilizador normal não usa elevador.
-    route_graph = nx.Graph()
-    route_graph.add_nodes_from(graph.nodes(data=True))
-    for node_a, node_b, data in graph.edges(data=True):
-        edge_type = data.get("edge_type")
-        if mobility_reduced and edge_type == "stairs":
-            continue
-        if not mobility_reduced and edge_type == "elevator":
-            continue
-        route_graph.add_edge(node_a, node_b, **data)
-
-    try:
-        # Lista de nós da rota escolhida por Dijkstra.
-        path = nx.shortest_path(route_graph, origin, destination, weight="weight")
-        # Soma dos `weight` ao longo da rota. É a distância/custo total mostrado.
-        distance = nx.shortest_path_length(route_graph, origin, destination, weight="weight")
-    except (nx.NetworkXNoPath, nx.NodeNotFound):
+    if origin not in graph.nodes or destination not in graph.nodes:
         return None, float("inf")
 
-    return path, round(distance, 2)
+    distances = {node_id: float("inf") for node_id in graph.nodes}
+    previous = {node_id: None for node_id in graph.nodes}
+    distances[origin] = 0.0
+    queue = [(0.0, origin)]
+    visited = set()
+
+    while queue:
+        current_distance, current_node = heapq.heappop(queue)
+        if current_node in visited:
+            continue
+        visited.add(current_node)
+
+        if current_node == destination:
+            break
+
+        for neighbor in graph.neighbors(current_node):
+            if neighbor in visited:
+                continue
+
+            edge_data = graph[current_node][neighbor]
+            edge_type = edge_data.get("edge_type")
+            if mobility_reduced and edge_type == "stairs":
+                continue
+            if not mobility_reduced and edge_type == "elevator":
+                continue
+
+            new_distance = current_distance + edge_data.get("weight", 1)
+            if new_distance < distances[neighbor]:
+                distances[neighbor] = new_distance
+                previous[neighbor] = current_node
+                heapq.heappush(queue, (new_distance, neighbor))
+
+    if distances[destination] == float("inf"):
+        return None, float("inf")
+
+    path = []
+    node = destination
+    while node is not None:
+        path.append(node)
+        node = previous[node]
+    path.reverse()
+
+    return path, round(distances[destination], 2)
 
 
 def lonlat_to_web_mercator(lat: float, lon: float):

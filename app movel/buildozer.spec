@@ -10,7 +10,7 @@ source.exclude_dirs = .git,.venv,venv,env,ENV,__pycache__,.tile_cache,build,dist
 source.exclude_exts = docx,pdf,zip
 
 version = 0.1
-requirements = python3,kivy,networkx
+requirements = python3,kivy
 orientation = portrait
 fullscreen = 0
 
