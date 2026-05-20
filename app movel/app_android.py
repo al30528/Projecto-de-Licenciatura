@@ -56,6 +56,7 @@ class GraphMapWidget(Widget):
         self.visible_floor = "Exterior"
         self.show_labels = False
         self._texture_cache = {}
+        self._image_cache = {}
         self.tile_cache_dir = nav.BASE_DIR / ".tile_cache" / "osm_carto_android"
         self.bind(pos=self._on_geometry_change, size=self._on_geometry_change)
 
@@ -135,23 +136,32 @@ class GraphMapWidget(Widget):
         if not image_path or not image_path.exists():
             return None, []
 
-        texture = self._texture_for(image_path)
+        image = self._image_for(image_path)
         world_file = nav.read_world_file(image_path)
-        if texture is None or world_file is None:
+        if image is None or world_file is None:
             return None, []
 
-        return image_path, nav.world_file_corners(world_file, texture.size)
+        # A calibração foi feita com os píxeis reais da imagem. Usar o tamanho
+        # da textura pode introduzir erro em Android se o backend ajustar a
+        # textura internamente.
+        return image_path, nav.world_file_corners(world_file, image.size)
 
-    def _texture_for(self, image_path):
-        """Carrega e guarda texturas Kivy para não reler a mesma imagem várias vezes."""
+    def _image_for(self, image_path):
+        """Carrega e guarda CoreImage para obter textura e tamanho real."""
 
         key = str(image_path)
-        if key not in self._texture_cache:
+        if key not in self._image_cache:
             try:
-                self._texture_cache[key] = CoreImage(key).texture
+                self._image_cache[key] = CoreImage(key)
             except Exception:
-                self._texture_cache[key] = None
-        return self._texture_cache[key]
+                self._image_cache[key] = None
+        return self._image_cache[key]
+
+    def _texture_for(self, image_path):
+        """Devolve a textura Kivy associada a uma imagem carregada em cache."""
+
+        image = self._image_for(image_path)
+        return image.texture if image is not None else None
 
     def _world_to_screen_factory(self, points):
         """Cria uma função que transforma coordenadas do mapa em píxeis no ecrã."""
@@ -185,7 +195,16 @@ class GraphMapWidget(Widget):
             return
 
         screen_corners = [world_to_screen(point) for point in corners]
-        tex_coords = [(0, 1), (1, 1), (1, 0), (0, 0)]
+        # `texture.tex_coords` respeita eventuais inversões internas feitas pelo
+        # loader Kivy. A ordem dos cantos do world file é:
+        # top-left, top-right, bottom-right, bottom-left.
+        tex = texture.tex_coords
+        tex_coords = [
+            (tex[6], tex[7]),
+            (tex[4], tex[5]),
+            (tex[2], tex[3]),
+            (tex[0], tex[1]),
+        ]
         vertices = []
         for point, tex_coord in zip(screen_corners, tex_coords):
             vertices.extend([point[0], point[1], tex_coord[0], tex_coord[1]])
