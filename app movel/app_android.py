@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import urllib.error
 import urllib.request
+import ssl
 from pathlib import Path
 
 from kivy.app import App
@@ -271,10 +272,25 @@ class GraphMapWidget(Widget):
             headers={"User-Agent": nav.OSM_TILE_USER_AGENT},
         )
         try:
-            with urllib.request.urlopen(request, timeout=8) as response:
+            # Em alguns builds Android, o Python consegue usar SSL mas não
+            # encontra a store de certificados do sistema. Para o protótipo,
+            # aceitamos a tile HTTPS sem validação para não perder o fundo OSM.
+            context = ssl._create_unverified_context() if url.startswith("https://") else None
+            with urllib.request.urlopen(request, timeout=8, context=context) as response:
                 tile_path.write_bytes(response.read())
-        except (urllib.error.URLError, TimeoutError, OSError):
-            return None
+        except (urllib.error.URLError, TimeoutError, OSError) as error:
+            print(f"Erro ao descarregar tile OSM por HTTPS {zoom}/{tile_x}/{tile_y}: {error}")
+            fallback_url = url.replace("https://", "http://", 1)
+            fallback_request = urllib.request.Request(
+                fallback_url,
+                headers={"User-Agent": nav.OSM_TILE_USER_AGENT},
+            )
+            try:
+                with urllib.request.urlopen(fallback_request, timeout=8) as response:
+                    tile_path.write_bytes(response.read())
+            except (urllib.error.URLError, TimeoutError, OSError) as fallback_error:
+                print(f"Erro ao descarregar tile OSM por HTTP {zoom}/{tile_x}/{tile_y}: {fallback_error}")
+                return None
 
         return tile_path
 

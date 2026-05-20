@@ -15,6 +15,7 @@ orientation = portrait
 fullscreen = 0
 
 android.permissions = INTERNET
+android.allow_cleartext = 1
 android.logcat_filters = *:S python:D
 
 [buildozer]
