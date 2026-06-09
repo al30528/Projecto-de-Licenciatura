@@ -113,6 +113,48 @@ Na interface é possível:
 - navegar entre pisos através de escadas/elevador quando existem ligações nos dados OSM;
 - confirmar a chegada a cada ponto antes de receber a próxima indicação.
 
+## Protótipo Android
+
+Na branch `android-app-prototype` existe uma segunda aplicação Python pensada para Android, baseada na lógica do protótipo desktop mas construída com Kivy.
+
+A app móvel está isolada na pasta `app movel/`. Essa pasta contém os ficheiros da aplicação e cópias das pastas necessárias para funcionar de forma autónoma:
+
+- `app movel/OSM Pisos/`;
+- `app movel/Imagens ECT2/`.
+
+Ficheiros principais:
+
+- `app movel/navigation_core.py`: lógica comum de grafos, filtros por edifício/piso, cálculo de rota e texto de navegação;
+- `app movel/app_android.py`: interface móvel em Kivy;
+- `app movel/main.py`: ponto de entrada usado pelo Buildozer;
+- `app movel/buildozer.spec`: configuração inicial para gerar APK;
+- `app movel/requirements-android.txt`: dependências da app móvel.
+
+A app Android carrega tiles OpenStreetMap Carto como fundo do mapa exterior, mostra a atribuição no mapa e guarda cache local dos tiles já usados. Para isso, o `buildozer.spec` inclui a permissão Android `INTERNET`.
+
+Para testar no computador, instala as dependências Android:
+
+```bash
+cd "app movel"
+pip install -r requirements-android.txt
+```
+
+E executa:
+
+```bash
+python app_android.py
+```
+
+Para gerar APK, usa Linux ou WSL com Buildozer instalado:
+
+```bash
+cd "app movel"
+pip install buildozer
+buildozer android debug
+```
+
+O APK gerado ficará na pasta `bin/`, que é ignorada pelo Git.
+
 ## Estado do repositório
 
 Este projecto está preparado para ser usado com o repositório:

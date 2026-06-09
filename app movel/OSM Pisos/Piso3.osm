@@ -1,0 +1,470 @@
+<?xml version='1.0' encoding='utf-8'?>
+<osm version="0.6" generator="JOSM">
+  <node id="-27029" action="modify" visible="true" lat="41.28588175028" lon="-7.74361889843">
+    <tag k="accessibilty" v="2" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="22" />
+    <tag k="roomname" v="Escadas P3-P2" />
+    <tag k="transition" v="ECT2-ESCADAS-P2-P3" />
+    <tag k="type" v="stairs" />
+  </node>
+  <node id="-27032" action="modify" visible="true" lat="41.28586159545" lon="-7.74362862144">
+    <tag k="accessibilty" v="1" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="21" />
+    <tag k="roomname" v="Corredor" />
+    <tag k="type" v="connection" />
+  </node>
+  <node id="-27033" action="modify" visible="true" lat="41.28583740963" lon="-7.74369198862">
+    <tag k="accessibilty" v="1" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="27" />
+    <tag k="roomname" v="WC H P3" />
+    <tag k="type" v="room" />
+  </node>
+  <node id="-27034" action="modify" visible="true" lat="41.28582531672" lon="-7.74364572052">
+    <tag k="accessibilty" v="1" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="20" />
+    <tag k="roomname" v="WC M P3" />
+    <tag k="type" v="room" />
+  </node>
+  <node id="-27035" action="modify" visible="true" lat="41.2858563048" lon="-7.74368327145">
+    <tag k="accessibilty" v="1" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="26" />
+    <tag k="roomname" v="Corredor" />
+    <tag k="type" v="connection" />
+  </node>
+  <node id="-27036" action="modify" visible="true" lat="41.28584395996" lon="-7.74363633279">
+    <tag k="accessibilty" v="1" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="19" />
+    <tag k="roomname" v="Corredor" />
+    <tag k="type" v="connection" />
+  </node>
+  <node id="-27038" action="modify" visible="true" lat="41.28586864964" lon="-7.74373188648">
+    <tag k="accessibilty" v="1" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="28" />
+    <tag k="roomname" v="Corredor" />
+    <tag k="type" v="connection" />
+  </node>
+  <node id="-27039" action="modify" visible="true" lat="41.2858797348" lon="-7.74377211962">
+    <tag k="accessibilty" v="1" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="31" />
+    <tag k="roomname" v="Corredor" />
+    <tag k="type" v="connection" />
+  </node>
+  <node id="-27040" action="modify" visible="true" lat="41.28588930835" lon="-7.74380832944">
+    <tag k="accessibilty" v="1" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="34" />
+    <tag k="roomname" v="Corredor" />
+    <tag k="type" v="connection" />
+  </node>
+  <node id="-27041" action="modify" visible="true" lat="41.28589233157" lon="-7.743818723">
+    <tag k="accessibilty" v="1" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="35" />
+    <tag k="roomname" v="F3.26" />
+    <tag k="type" v="room" />
+  </node>
+  <node id="-27042" action="modify" visible="true" lat="41.28591828091" lon="-7.74379424784">
+    <tag k="accessibilty" v="1" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="36" />
+    <tag k="roomname" v="F3.24" />
+    <tag k="type" v="room" />
+  </node>
+  <node id="-27043" action="modify" visible="true" lat="41.28587242867" lon="-7.74382744018">
+    <tag k="accessibilty" v="1" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="39" />
+    <tag k="roomname" v="F3.27" />
+    <tag k="type" v="room" />
+  </node>
+  <node id="-27044" action="modify" visible="true" lat="41.28586990932" lon="-7.74381704662">
+    <tag k="accessibilty" v="1" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="37" />
+    <tag k="roomname" v="Corredor" />
+    <tag k="type" v="connection" />
+  </node>
+  <node id="-27045" action="modify" visible="true" lat="41.28583640189" lon="-7.74383179877">
+    <tag k="accessibilty" v="1" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="38" />
+    <tag k="roomname" v="F3.28" />
+    <tag k="type" v="room" />
+  </node>
+  <node id="-27046" action="modify" visible="true" lat="41.28584773899" lon="-7.74360012297">
+    <tag k="accessibilty" v="1" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="18" />
+    <tag k="roomname" v="F3.11" />
+    <tag k="type" v="room" />
+  </node>
+  <node id="-27047" action="modify" visible="true" lat="41.28584043286" lon="-7.74357363615">
+    <tag k="accessibilty" v="1" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="15" />
+    <tag k="roomname" v="F3.10" />
+    <tag k="type" v="room" />
+  </node>
+  <node id="-27048" action="modify" visible="true" lat="41.28583287479" lon="-7.74354413185">
+    <tag k="accessibilty" v="1" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="13" />
+    <tag k="roomname" v="F3.9" />
+    <tag k="type" v="room" />
+  </node>
+  <node id="-27049" action="modify" visible="true" lat="41.28583841737" lon="-7.743603811">
+    <tag k="accessibilty" v="1" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="17" />
+    <tag k="roomname" v="Corredor" />
+    <tag k="type" v="connection" />
+  </node>
+  <node id="-27050" action="modify" visible="true" lat="41.28583211898" lon="-7.74357665364">
+    <tag k="accessibilty" v="1" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="14" />
+    <tag k="roomname" v="Corredor" />
+    <tag k="type" v="connection" />
+  </node>
+  <node id="-27051" action="modify" visible="true" lat="41.28582330123" lon="-7.74358034167">
+    <tag k="accessibilty" v="1" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="16" />
+    <tag k="roomname" v="F3.12" />
+    <tag k="type" v="room" />
+  </node>
+  <node id="-27052" action="modify" visible="true" lat="41.28582405704" lon="-7.74354714934">
+    <tag k="accessibilty" v="1" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="12" />
+    <tag k="roomname" v="Corredor" />
+    <tag k="type" v="connection" />
+  </node>
+  <node id="-27053" action="modify" visible="true" lat="41.28582456091" lon="-7.74351228062">
+    <tag k="accessibilty" v="1" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="10" />
+    <tag k="roomname" v="F3.7" />
+    <tag k="type" v="room" />
+  </node>
+  <node id="-27054" action="modify" visible="true" lat="41.28580768122" lon="-7.74352032725">
+    <tag k="accessibilty" v="1" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="11" />
+    <tag k="roomname" v="F3.8" />
+    <tag k="type" v="room" />
+  </node>
+  <node id="-27055" action="modify" visible="true" lat="41.28581624704" lon="-7.74351630393">
+    <tag k="accessibilty" v="1" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="9" />
+    <tag k="roomname" v="Corredor" />
+    <tag k="type" v="connection" />
+  </node>
+  <node id="-27056" action="modify" visible="true" lat="41.28580642154" lon="-7.74347774718">
+    <tag k="accessibilty" v="1" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="2" />
+    <tag k="roomname" v="Corredor" />
+    <tag k="type" v="connection" />
+  </node>
+  <node id="-27057" action="modify" visible="true" lat="41.28587897899" lon="-7.74344556067">
+    <tag k="accessibilty" v="2" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="1" />
+    <tag k="roomname" v="Entrada P3" />
+    <tag k="transition" v="ECT2-ESCADAS-EXTERIOR-P2-P3" />
+    <tag k="type" v="stairs" />
+  </node>
+  <node id="-27058" action="modify" visible="true" lat="41.28579886347" lon="-7.74344924871">
+    <tag k="accessibilty" v="1" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="3" />
+    <tag k="roomname" v="Corredor" />
+    <tag k="type" v="connection" />
+  </node>
+  <node id="-27059" action="modify" visible="true" lat="41.28580969671" lon="-7.74344455484">
+    <tag k="accessibilty" v="1" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="5" />
+    <tag k="roomname" v="F3.3" />
+    <tag k="type" v="room" />
+  </node>
+  <node id="-27060" action="modify" visible="true" lat="41.2857913054" lon="-7.74342376772">
+    <tag k="accessibilty" v="1" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="4" />
+    <tag k="roomname" v="F3.1" />
+    <tag k="type" v="room" />
+  </node>
+  <node id="-27061" action="modify" visible="true" lat="41.28577694505" lon="-7.74345796589">
+    <tag k="accessibilty" v="1" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="6" />
+    <tag k="roomname" v="Corredor" />
+    <tag k="type" v="connection" />
+  </node>
+  <node id="-27062" action="modify" visible="true" lat="41.28576963891" lon="-7.74343382601">
+    <tag k="accessibilty" v="1" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="7" />
+    <tag k="roomname" v="F3.2" />
+    <tag k="type" v="room" />
+  </node>
+  <node id="-27063" action="modify" visible="true" lat="41.28575704212" lon="-7.74346534196">
+    <tag k="accessibilty" v="1" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="8" />
+    <tag k="roomname" v="F3.5" />
+    <tag k="type" v="room" />
+  </node>
+  <node id="-27067" action="modify" visible="true" lat="41.28586965738" lon="-7.74365913156">
+    <tag k="accessibilty" v="1" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="23" />
+    <tag k="roomname" v="Corredor" />
+    <tag k="type" v="connection" />
+  </node>
+  <node id="-27068" action="modify" visible="true" lat="41.28588678899" lon="-7.74365142021">
+    <tag k="accessibilty" v="3" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="24" />
+    <tag k="roomname" v="Elevador P3" />
+    <tag k="type" v="elevator" />
+  <tag k="transition" v="ECT2-ELEVADOR-PRINCIPAL" /></node>
+  <node id="-27091" action="modify" visible="true" lat="41.28585202189" lon="-7.74366784874">
+    <tag k="accessibilty" v="1" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="25" />
+    <tag k="roomname" v="Corredor" />
+    <tag k="type" v="connection" />
+  </node>
+  <node id="-27122" action="modify" visible="true" lat="41.28585882415" lon="-7.74373624507">
+    <tag k="accessibilty" v="1" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="29" />
+    <tag k="roomname" v="F3.21" />
+    <tag k="type" v="room" />
+  </node>
+  <node id="-27123" action="modify" visible="true" lat="41.28588049061" lon="-7.74372685734">
+    <tag k="accessibilty" v="1" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="30" />
+    <tag k="roomname" v="F3.21" />
+    <tag k="type" v="room" />
+  </node>
+  <node id="-27124" action="modify" visible="true" lat="41.28589081996" lon="-7.74376776103">
+    <tag k="accessibilty" v="1" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="33" />
+    <tag k="roomname" v="F3.22" />
+    <tag k="type" v="room" />
+  </node>
+  <node id="-27125" action="modify" visible="true" lat="41.28586890158" lon="-7.74377681348">
+    <tag k="accessibilty" v="1" />
+    <tag k="building" v="ECT2" />
+    <tag k="floor" v="3" />
+    <tag k="nodeID" v="32" />
+    <tag k="roomname" v="F3.23" />
+    <tag k="type" v="room" />
+  </node>
+  <way id="-1774" action="modify" visible="true">
+    <nd ref="-27029" />
+    <nd ref="-27032" />
+  </way>
+  <way id="-1777" action="modify" visible="true">
+    <nd ref="-27067" />
+    <nd ref="-27032" />
+  </way>
+  <way id="-1778" action="modify" visible="true">
+    <nd ref="-27068" />
+    <nd ref="-27067" />
+  </way>
+  <way id="-1779" action="modify" visible="true">
+    <nd ref="-27036" />
+    <nd ref="-27032" />
+  </way>
+  <way id="-1802" action="modify" visible="true">
+    <nd ref="-27034" />
+    <nd ref="-27036" />
+  </way>
+  <way id="-1803" action="modify" visible="true">
+    <nd ref="-27091" />
+    <nd ref="-27036" />
+  </way>
+  <way id="-1804" action="modify" visible="true">
+    <nd ref="-27067" />
+    <nd ref="-27091" />
+  </way>
+  <way id="-1805" action="modify" visible="true">
+    <nd ref="-27035" />
+    <nd ref="-27091" />
+  </way>
+  <way id="-1806" action="modify" visible="true">
+    <nd ref="-27033" />
+    <nd ref="-27035" />
+  </way>
+  <way id="-1837" action="modify" visible="true">
+    <nd ref="-27038" />
+    <nd ref="-27035" />
+  </way>
+  <way id="-1838" action="modify" visible="true">
+    <nd ref="-27122" />
+    <nd ref="-27038" />
+  </way>
+  <way id="-1839" action="modify" visible="true">
+    <nd ref="-27123" />
+    <nd ref="-27038" />
+  </way>
+  <way id="-1840" action="modify" visible="true">
+    <nd ref="-27039" />
+    <nd ref="-27038" />
+  </way>
+  <way id="-1841" action="modify" visible="true">
+    <nd ref="-27040" />
+    <nd ref="-27039" />
+  </way>
+  <way id="-1842" action="modify" visible="true">
+    <nd ref="-27124" />
+    <nd ref="-27039" />
+  </way>
+  <way id="-1843" action="modify" visible="true">
+    <nd ref="-27125" />
+    <nd ref="-27039" />
+  </way>
+  <way id="-1844" action="modify" visible="true">
+    <nd ref="-27041" />
+    <nd ref="-27040" />
+  </way>
+  <way id="-1845" action="modify" visible="true">
+    <nd ref="-27042" />
+    <nd ref="-27040" />
+  </way>
+  <way id="-1846" action="modify" visible="true">
+    <nd ref="-27045" />
+    <nd ref="-27044" />
+  </way>
+  <way id="-1847" action="modify" visible="true">
+    <nd ref="-27043" />
+    <nd ref="-27044" />
+  </way>
+  <way id="-1848" action="modify" visible="true">
+    <nd ref="-27040" />
+    <nd ref="-27044" />
+  </way>
+  <way id="-1849" action="modify" visible="true">
+    <nd ref="-27036" />
+    <nd ref="-27049" />
+  </way>
+  <way id="-1850" action="modify" visible="true">
+    <nd ref="-27046" />
+    <nd ref="-27049" />
+  </way>
+  <way id="-1851" action="modify" visible="true">
+    <nd ref="-27047" />
+    <nd ref="-27050" />
+  </way>
+  <way id="-1852" action="modify" visible="true">
+    <nd ref="-27051" />
+    <nd ref="-27050" />
+  </way>
+  <way id="-1853" action="modify" visible="true">
+    <nd ref="-27050" />
+    <nd ref="-27049" />
+  </way>
+  <way id="-1854" action="modify" visible="true">
+    <nd ref="-27050" />
+    <nd ref="-27052" />
+  </way>
+  <way id="-1855" action="modify" visible="true">
+    <nd ref="-27048" />
+    <nd ref="-27052" />
+  </way>
+  <way id="-1856" action="modify" visible="true">
+    <nd ref="-27052" />
+    <nd ref="-27055" />
+  </way>
+  <way id="-1857" action="modify" visible="true">
+    <nd ref="-27053" />
+    <nd ref="-27055" />
+  </way>
+  <way id="-1858" action="modify" visible="true">
+    <nd ref="-27054" />
+    <nd ref="-27055" />
+  </way>
+  <way id="-1859" action="modify" visible="true">
+    <nd ref="-27055" />
+    <nd ref="-27056" />
+    <nd ref="-27057" />
+  </way>
+  <way id="-1861" action="modify" visible="true">
+    <nd ref="-27059" />
+    <nd ref="-27058" />
+  </way>
+  <way id="-1862" action="modify" visible="true">
+    <nd ref="-27060" />
+    <nd ref="-27058" />
+  </way>
+  <way id="-1863" action="modify" visible="true">
+    <nd ref="-27062" />
+    <nd ref="-27061" />
+  </way>
+  <way id="-1864" action="modify" visible="true">
+    <nd ref="-27063" />
+    <nd ref="-27061" />
+  </way>
+  <way id="-1865" action="modify" visible="true">
+    <nd ref="-27058" />
+    <nd ref="-27061" />
+  </way>
+  <way id="-1866" action="modify" visible="true">
+    <nd ref="-27058" />
+    <nd ref="-27056" />
+  </way>
+</osm>
