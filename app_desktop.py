@@ -554,6 +554,12 @@ class DesktopNavigationApp(tk.Tk):
         self.status_var = tk.StringVar(value="Escolhe o edifício, a origem e o destino.")
         self.step_var = tk.StringVar(value="Ainda não há rota calculada.")
         self.show_labels_var = tk.BooleanVar(value=False)
+        self.zoom_var = tk.StringVar(value="100%")
+        self.map_zoom = 1.0
+        self.map_center = None
+        self.map_center_floor = None
+        self.map_axis = None
+        self.map_drag_start = None
 
         self._build_layout()
         self.load_campus()
@@ -702,11 +708,44 @@ class DesktopNavigationApp(tk.Tk):
         main_area = ttk.Frame(self, padding=(0, 10, 10, 10))
         main_area.grid(row=0, column=1, sticky="nsew")
         main_area.columnconfigure(0, weight=1)
+        main_area.columnconfigure(1, weight=0)
         main_area.rowconfigure(0, weight=1)
 
         self.figure = Figure(figsize=(10, 7), dpi=100)
+        self.figure.subplots_adjust(left=0.015, right=0.985, bottom=0.02, top=0.94)
         self.canvas = FigureCanvasTkAgg(self.figure, master=main_area)
         self.canvas.get_tk_widget().grid(row=0, column=0, sticky="nsew")
+        self.canvas.mpl_connect("button_press_event", self._on_map_press)
+        self.canvas.mpl_connect("motion_notify_event", self._on_map_drag)
+        self.canvas.mpl_connect("button_release_event", self._on_map_release)
+        self.canvas.mpl_connect("scroll_event", self._on_map_scroll)
+
+        zoom_controls = ttk.Frame(main_area, padding=(8, 0, 0, 0))
+        zoom_controls.grid(row=0, column=1, sticky="ns")
+        zoom_controls.rowconfigure(4, weight=1)
+        ttk.Button(
+            zoom_controls,
+            text="+",
+            width=8,
+            command=self.zoom_in_map,
+        ).grid(row=0, column=0, sticky="ew", pady=(0, 6))
+        ttk.Button(
+            zoom_controls,
+            text="-",
+            width=8,
+            command=self.zoom_out_map,
+        ).grid(row=1, column=0, sticky="ew")
+        ttk.Button(
+            zoom_controls,
+            text="Centrar",
+            width=8,
+            command=self.center_map_on_current_step,
+        ).grid(row=2, column=0, sticky="ew", pady=(10, 0))
+        ttk.Label(
+            zoom_controls,
+            textvariable=self.zoom_var,
+            anchor="center",
+        ).grid(row=3, column=0, sticky="ew", pady=(8, 0))
 
     def load_campus(self):
         """Carrega mapas OSM, cria o grafo global e inicializa a interface."""
@@ -928,6 +967,7 @@ class DesktopNavigationApp(tk.Tk):
         )
         # Ao calcular, a vista muda automaticamente para onde a rota começa.
         self.visible_floor_var.set(self.graph.nodes[path[0]].get("floor_key", self.visible_floor_var.get()))
+        self.center_map_on_current_step(redraw=False)
         self.status_var.set(
             f"Rota pronta: {distance:.1f} m."
         )
@@ -949,6 +989,7 @@ class DesktopNavigationApp(tk.Tk):
         current = self.route.path[self.route.current_index]
         # Se o próximo ponto estiver noutro piso, a vista acompanha a rota.
         self.visible_floor_var.set(self.graph.nodes[current].get("floor_key", self.visible_floor_var.get()))
+        self.center_map_on_current_step(redraw=False)
         self._update_step_text()
         self.draw_map()
 
@@ -1086,6 +1127,7 @@ class DesktopNavigationApp(tk.Tk):
         visible_floor = self.visible_floor_var.get()
         image_path = FLOOR_IMAGES.get(visible_floor)
         axis = self.figure.add_subplot(1, 1, 1)
+        self.map_axis = axis
 
         if visible_floor == "Exterior":
             self._draw_exterior_tiles(axis, visible_floor)
@@ -1094,8 +1136,108 @@ class DesktopNavigationApp(tk.Tk):
 
         # O grafo é desenhado depois do fundo para ficar por cima da imagem/mapa.
         self._draw_graph_axis(axis, route_path, current_index, visible_floor, image_path)
-        self.figure.tight_layout()
+        self.figure.subplots_adjust(left=0.015, right=0.985, bottom=0.02, top=0.94)
         self.canvas.draw()
+
+    def zoom_in_map(self):
+        """Aproxima a vista atual em passos de 10%."""
+
+        self._change_map_zoom(1.1)
+
+    def zoom_out_map(self):
+        """Afasta a vista atual em passos de 10%."""
+
+        self._change_map_zoom(1 / 1.1)
+
+    def center_map_on_current_step(self, redraw=True):
+        """Centra a vista no ponto atual da rota, mantendo o zoom escolhido."""
+
+        if self.route is None or self.graph is None or not self.route.path:
+            self.map_center = None
+            self.map_center_floor = None
+            if redraw:
+                self.draw_map()
+            return
+
+        current = self.route.path[min(self.route.current_index, len(self.route.path) - 1)]
+        data = self.graph.nodes[current]
+        self.map_center = lonlat_to_web_mercator(data["lat"], data["lon"])
+        self.map_center_floor = data.get("floor_key")
+        if redraw:
+            self.visible_floor_var.set(self.map_center_floor or self.visible_floor_var.get())
+            self.draw_map()
+
+    def _change_map_zoom(self, multiplier, center=None):
+        """Atualiza o zoom e usa o centro atual, o cursor ou o ponto da rota."""
+
+        visible_floor = self.visible_floor_var.get()
+        if center is not None:
+            self.map_center = center
+            self.map_center_floor = visible_floor
+        elif self.map_center is None or self.map_center_floor != visible_floor:
+            self.center_map_on_current_step(redraw=False)
+
+        self.map_zoom = max(0.5, min(8.0, self.map_zoom * multiplier))
+        self.zoom_var.set(f"{self.map_zoom * 100:.0f}%")
+        self.draw_map()
+
+    def _on_map_press(self, event):
+        """Guarda o ponto inicial para permitir arrastar o mapa com o rato."""
+
+        if event.inaxes != self.map_axis or event.button != 1:
+            return
+
+        self.map_drag_start = {
+            "mouse_x": event.x,
+            "mouse_y": event.y,
+            "xlim": self.map_axis.get_xlim(),
+            "ylim": self.map_axis.get_ylim(),
+        }
+
+    def _on_map_drag(self, event):
+        """Move os limites do eixo enquanto o utilizador arrasta o mapa."""
+
+        if self.map_drag_start is None or self.map_axis is None:
+            return
+
+        start = self.map_drag_start
+        xlim = start["xlim"]
+        ylim = start["ylim"]
+        axis_width = max(self.map_axis.bbox.width, 1)
+        axis_height = max(self.map_axis.bbox.height, 1)
+        delta_x = (event.x - start["mouse_x"]) * (xlim[1] - xlim[0]) / axis_width
+        delta_y = (event.y - start["mouse_y"]) * (ylim[1] - ylim[0]) / axis_height
+        self.map_axis.set_xlim(xlim[0] - delta_x, xlim[1] - delta_x)
+        self.map_axis.set_ylim(ylim[0] - delta_y, ylim[1] - delta_y)
+        self._store_current_axis_center()
+        self.canvas.draw_idle()
+
+    def _on_map_release(self, _event):
+        """Termina o arrasto e guarda o novo centro da vista."""
+
+        if self.map_drag_start is not None:
+            self._store_current_axis_center()
+        self.map_drag_start = None
+
+    def _on_map_scroll(self, event):
+        """Permite aproximar/afastar com a roda do rato sobre o mapa."""
+
+        if event.inaxes != self.map_axis or event.xdata is None or event.ydata is None:
+            return
+
+        multiplier = 1.1 if event.button == "up" else 1 / 1.1
+        self._change_map_zoom(multiplier)
+
+    def _store_current_axis_center(self):
+        """Guarda o centro da vista depois de uma interação manual."""
+
+        if self.map_axis is None:
+            return
+
+        min_x, max_x = self.map_axis.get_xlim()
+        min_y, max_y = self.map_axis.get_ylim()
+        self.map_center = ((min_x + max_x) / 2, (min_y + max_y) / 2)
+        self.map_center_floor = self.visible_floor_var.get()
 
     def _draw_exterior_tiles(self, axis, visible_floor):
         """Desenha o exterior com tiles OpenStreetMap Carto em Web Mercator."""
@@ -1221,9 +1363,11 @@ class DesktopNavigationApp(tk.Tk):
             y_values = [pos[node_a][1], pos[node_b][1]]
             axis.plot(x_values, y_values, color="#424242", linewidth=1.2, alpha=0.75, zorder=1)
 
+        route_node_set = set(path or [])
         for node_id, (x_value, y_value) in pos.items():
             color = get_node_color(self.graph, node_id)
             size = 18
+            alpha = 0.25 if path and node_id not in route_node_set else 0.9
             # A cor do nó vem da lógica base e distingue salas, corredores,
             # escadas, elevadores e outros pontos.
             axis.scatter(
@@ -1233,6 +1377,7 @@ class DesktopNavigationApp(tk.Tk):
                 color=color,
                 edgecolor="white",
                 linewidth=0.6,
+                alpha=alpha,
                 zorder=2,
             )
 
@@ -1279,23 +1424,77 @@ class DesktopNavigationApp(tk.Tk):
                     width = 2.4
                 axis.plot(x_values, y_values, color=color, linewidth=width, zorder=4)
 
-            origin = path[0]
-            destination = path[-1]
-            # Marcadores maiores destacam origem, destino e posição atual.
-            if origin in floor_node_set:
-                axis.scatter(*pos[origin], s=120, color="#43a047", edgecolor="white", zorder=5)
-            if destination in floor_node_set:
-                axis.scatter(*pos[destination], s=120, color="#1e88e5", edgecolor="white", zorder=5)
-
-            if current_index is not None:
-                current = path[current_index]
-                if current in floor_node_set:
-                    axis.scatter(*pos[current], s=150, color="#fbc02d", edgecolor="black", zorder=6)
+            self._draw_route_points(axis, path, current_index, floor_node_set, pos)
 
         axis.set_title(f"Mapa calibrado e rota - {visible_floor}")
-        axis.set_aspect("equal", adjustable="box")
+        axis.set_aspect("equal", adjustable="datalim", anchor="C")
         self._set_map_limits(axis, pos, image_path)
+        self._apply_map_view(axis, visible_floor)
         axis.axis("off")
+
+    def _draw_route_points(self, axis, path, current_index, floor_node_set, pos):
+        """Destaca e numera apenas os pontos que pertencem à rota calculada."""
+
+        current_index = current_index or 0
+        destination_index = len(path) - 1
+
+        for index, node_id in enumerate(path):
+            if node_id not in floor_node_set:
+                continue
+
+            x_value, y_value = pos[node_id]
+            fill_color = "#ffffff"
+            edge_color = "#d32f2f"
+            text_color = "#111111"
+            marker_size = 95
+            line_width = 1.3
+            zorder = 6
+
+            if index < current_index:
+                fill_color = "#43a047"
+                edge_color = "white"
+                text_color = "white"
+                marker_size = 85
+            elif index == current_index:
+                fill_color = "#fbc02d"
+                edge_color = "black"
+                text_color = "#111111"
+                marker_size = 175
+                line_width = 1.8
+                zorder = 8
+            elif index == current_index + 1:
+                fill_color = "#fb8c00"
+                edge_color = "black"
+                text_color = "white"
+                marker_size = 140
+                line_width = 1.6
+                zorder = 7
+            elif index == destination_index:
+                fill_color = "#1e88e5"
+                edge_color = "white"
+                text_color = "white"
+                marker_size = 125
+
+            axis.scatter(
+                x_value,
+                y_value,
+                s=marker_size,
+                color=fill_color,
+                edgecolor=edge_color,
+                linewidth=line_width,
+                zorder=zorder,
+            )
+            axis.text(
+                x_value,
+                y_value,
+                str(index + 1),
+                fontsize=7,
+                fontweight="bold",
+                ha="center",
+                va="center",
+                color=text_color,
+                zorder=zorder + 1,
+            )
 
     def _set_map_limits(self, axis, positions, image_path):
         """Ajusta o enquadramento para incluir nós e cantos da imagem calibrada."""
@@ -1320,6 +1519,45 @@ class DesktopNavigationApp(tk.Tk):
         margin_y = height * 0.18 if height else 1
         axis.set_xlim(min(x_values) - margin_x, max(x_values) + margin_x)
         axis.set_ylim(min(y_values) - margin_y, max(y_values) + margin_y)
+
+    def _apply_map_view(self, axis, visible_floor):
+        """Aplica zoom e centro sem deixar o eixo encolher dentro da figura."""
+
+        min_x, max_x = axis.get_xlim()
+        min_y, max_y = axis.get_ylim()
+        center = self.map_center
+        if self.map_center_floor != visible_floor:
+            center = None
+
+        if center is None:
+            center = ((min_x + max_x) / 2, (min_y + max_y) / 2)
+
+        target_ratio = self._map_axes_ratio(axis)
+        view_width = abs(max_x - min_x) / self.map_zoom
+        view_height = abs(max_y - min_y) / self.map_zoom
+        current_ratio = view_width / view_height if view_height else target_ratio
+
+        if current_ratio < target_ratio:
+            view_width = view_height * target_ratio
+        elif current_ratio > target_ratio:
+            view_height = view_width / target_ratio
+
+        half_width = view_width / 2
+        half_height = view_height / 2
+        axis.set_xlim(center[0] - half_width, center[0] + half_width)
+        axis.set_ylim(center[1] - half_height, center[1] + half_height)
+
+    def _map_axes_ratio(self, axis):
+        """Calcula a proporção largura/altura da área real onde o mapa é desenhado."""
+
+        bbox = axis.bbox
+        width = bbox.width
+        height = bbox.height
+        if width <= 1 or height <= 1:
+            widget = self.canvas.get_tk_widget()
+            width = max(widget.winfo_width(), 1)
+            height = max(widget.winfo_height(), 1)
+        return max(width / height, 0.01)
 
 
 def main():
