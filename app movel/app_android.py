@@ -22,6 +22,7 @@ from kivy.uix.label import Label
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.screenmanager import Screen, ScreenManager
 from kivy.uix.spinner import Spinner
+from kivy.uix.stencilview import StencilView
 from kivy.uix.widget import Widget
 from kivy.utils import get_color_from_hex
 
@@ -46,39 +47,114 @@ class Surface(BoxLayout):
         self._background_rect.size = self.size
 
 
-class GraphMapWidget(Widget):
+class GraphMapWidget(StencilView):
     """Canvas simples para ver o grafo e a rota no ecrã móvel."""
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self._draw_area = Widget()
+        self.add_widget(self._draw_area)
+        self._draw_area.pos = self.pos
+        self._draw_area.size = self.size
         self.graph = None
         self.route = None
         self.visible_floor = "Exterior"
         self.show_labels = False
+        self.map_zoom = 1.0
+        self.map_center = None
+        self.map_center_floor = None
+        self._route_focus_key = None
+        self._drag_touch_id = None
+        self._drag_start = None
+        self._drag_start_center = None
+        self._last_world_scale = 1.0
+        self._last_view_center = None
         self._texture_cache = {}
         self._image_cache = {}
         self.tile_cache_dir = nav.BASE_DIR / ".tile_cache" / "osm_carto_android"
         self.bind(pos=self._on_geometry_change, size=self._on_geometry_change)
 
     def _on_geometry_change(self, *_args):
-        """Redesenha o mapa quando o widget muda de posição ou tamanho."""
+        """Atualiza a área interna e redesenha quando o widget muda de geometria."""
 
+        self._draw_area.pos = self.pos
+        self._draw_area.size = self.size
         self.redraw()
 
     def set_state(self, graph, visible_floor, route=None, show_labels=False):
         """Recebe o estado atual da app e dispara novo desenho do mapa."""
 
+        floor_changed = visible_floor != self.visible_floor
         self.graph = graph
         self.visible_floor = visible_floor
         self.route = route
         self.show_labels = show_labels
+        if floor_changed:
+            self.map_center = None
+            self.map_center_floor = None
+
+        focus_key = self._current_route_focus_key()
+        if focus_key is not None and focus_key != self._route_focus_key:
+            self.center_on_current_route(redraw=False)
+        self._route_focus_key = focus_key
         self.redraw()
+
+    def zoom_in(self):
+        """Aproxima a vista mantendo o centro atual do mapa."""
+
+        self._change_zoom(1.1)
+
+    def zoom_out(self):
+        """Afasta a vista mantendo o centro atual do mapa."""
+
+        self._change_zoom(1 / 1.1)
+
+    def center_on_current_route(self, redraw=True):
+        """Centra o mapa no ponto atual da rota ou no centro do piso se não houver rota."""
+
+        if self.graph is None or self.route is None or not self.route.path:
+            self.map_center = None
+            self.map_center_floor = None
+            if redraw:
+                self.redraw()
+            return
+
+        current = self.route.path[min(self.route.current_index, len(self.route.path) - 1)]
+        data = self.graph.nodes[current]
+        self.map_center = nav.lonlat_to_web_mercator(data["lat"], data["lon"])
+        self.map_center_floor = data.get("floor_key")
+        if redraw:
+            self.redraw()
+
+    def _change_zoom(self, multiplier):
+        """Atualiza o fator de zoom e redesenha o mapa."""
+
+        if self.map_center is None or self.map_center_floor != self.visible_floor:
+            self.map_center = self._last_view_center
+            self.map_center_floor = self.visible_floor if self.map_center else None
+            if self.map_center is None:
+                self.center_on_current_route(redraw=False)
+
+        self.map_zoom = max(0.6, min(8.0, self.map_zoom * multiplier))
+        self.redraw()
+
+    def _current_route_focus_key(self):
+        """Identifica o ponto atual para recentrar apenas quando a navegação avança."""
+
+        if self.route is None or not self.route.path:
+            return None
+
+        current_index = min(self.route.current_index, len(self.route.path) - 1)
+        current_node = self.route.path[current_index]
+        floor = self.graph.nodes[current_node].get("floor_key") if self.graph else self.visible_floor
+        return current_node, current_index, floor
 
     def redraw(self):
         """Limpa o canvas e desenha mapa, grafo, rota e labels do piso visível."""
 
-        self.canvas.clear()
-        with self.canvas:
+        canvas = self._draw_area.canvas
+        canvas.clear()
+        with canvas:
             Color(0.96, 0.97, 0.98, 1)
             Rectangle(pos=self.pos, size=self.size)
 
@@ -113,7 +189,7 @@ class GraphMapWidget(Widget):
         if world_to_screen is None:
             return
 
-        with self.canvas:
+        with canvas:
             if self.visible_floor == "Exterior":
                 self._draw_osm_tiles(tile_extents, world_to_screen)
 
@@ -121,13 +197,13 @@ class GraphMapWidget(Widget):
                 self._draw_floor_image(image_path, image_corners, world_to_screen)
 
             self._draw_edges(floor_node_set, positions, world_to_screen)
-            self._draw_route(floor_node_set, positions, world_to_screen)
             self._draw_nodes(positions, world_to_screen)
+            self._draw_route(floor_node_set, positions, world_to_screen)
 
-        if self.show_labels:
-            self._draw_labels(floor_node_set, positions, world_to_screen)
-        if self.visible_floor == "Exterior":
-            self._draw_osm_attribution()
+            if self.show_labels:
+                self._draw_labels(floor_node_set, positions, world_to_screen)
+            if self.visible_floor == "Exterior":
+                self._draw_osm_attribution()
 
     def _floor_image_corners(self):
         """Obtém a imagem calibrada do piso e os seus cantos no mundo real."""
@@ -178,14 +254,125 @@ class GraphMapWidget(Widget):
         margin = dp(18)
         usable_width = max(self.width - margin * 2, 1)
         usable_height = max(self.height - margin * 2, 1)
-        scale = min(usable_width / range_x, usable_height / range_y)
-        offset_x = self.x + (self.width - range_x * scale) / 2 - min_x * scale
-        offset_y = self.y + (self.height - range_y * scale) / 2 - min_y * scale
+        target_ratio = usable_width / usable_height
+        view_width = range_x
+        view_height = range_y
+        current_ratio = view_width / view_height if view_height else target_ratio
+        if current_ratio < target_ratio:
+            view_width = view_height * target_ratio
+        elif current_ratio > target_ratio:
+            view_height = view_width / target_ratio
+
+        center = self.map_center
+        if self.map_center_floor != self.visible_floor:
+            center = None
+        if center is None:
+            center = ((min_x + max_x) / 2, (min_y + max_y) / 2)
+
+        view_width /= self.map_zoom
+        view_height /= self.map_zoom
+        min_view_x = center[0] - view_width / 2
+        min_view_y = center[1] - view_height / 2
+        scale = min(usable_width / view_width, usable_height / view_height)
+        offset_x = self.x + margin - min_view_x * scale
+        offset_y = self.y + margin - min_view_y * scale
+        self._last_world_scale = scale
+        self._last_view_center = center
 
         def world_to_screen(point):
             return offset_x + point[0] * scale, offset_y + point[1] * scale
 
         return world_to_screen
+
+    def on_touch_down(self, touch):
+        """Começa o arrasto do mapa quando o utilizador toca dentro do widget."""
+
+        if not self.collide_point(*touch.pos):
+            return super().on_touch_down(touch)
+        if self._drag_touch_id is not None:
+            return super().on_touch_down(touch)
+
+        self._drag_touch_id = touch.uid
+        self._drag_start = touch.pos
+        self._drag_start_center = self.map_center or self._last_view_center
+        self.map_center_floor = self.visible_floor
+        return True
+
+    def on_touch_move(self, touch):
+        """Desloca a vista do mapa enquanto o dedo/mouse é arrastado."""
+
+        if touch.uid != self._drag_touch_id or self._drag_start_center is None:
+            return super().on_touch_move(touch)
+
+        scale = max(self._last_world_scale, 0.000001)
+        delta_x = (touch.x - self._drag_start[0]) / scale
+        delta_y = (touch.y - self._drag_start[1]) / scale
+        self.map_center = (
+            self._drag_start_center[0] - delta_x,
+            self._drag_start_center[1] - delta_y,
+        )
+        self.map_center_floor = self.visible_floor
+        self.redraw()
+        return True
+
+    def on_touch_up(self, touch):
+        """Termina o arrasto atual do mapa."""
+
+        if touch.uid != self._drag_touch_id:
+            return super().on_touch_up(touch)
+
+        self._drag_touch_id = None
+        self._drag_start = None
+        self._drag_start_center = None
+        return True
+
+    def _point_inside_map(self, point, inset=0):
+        """Confirma se um ponto de ecrã está dentro da caixa visível do mapa."""
+
+        x_value, y_value = point
+        return (
+            self.x + inset <= x_value <= self.right - inset
+            and self.y + inset <= y_value <= self.top - inset
+        )
+
+    def _clip_segment_to_map(self, start, end):
+        """Corta uma linha ao retângulo do mapa para impedir desenho fora da caixa."""
+
+        min_x, min_y = self.x, self.y
+        max_x, max_y = self.right, self.top
+        x1, y1 = start
+        x2, y2 = end
+        dx = x2 - x1
+        dy = y2 - y1
+        t0 = 0.0
+        t1 = 1.0
+
+        for edge_delta, edge_distance in (
+            (-dx, x1 - min_x),
+            (dx, max_x - x1),
+            (-dy, y1 - min_y),
+            (dy, max_y - y1),
+        ):
+            if edge_delta == 0:
+                if edge_distance < 0:
+                    return None
+                continue
+
+            ratio = edge_distance / edge_delta
+            if edge_delta < 0:
+                if ratio > t1:
+                    return None
+                if ratio > t0:
+                    t0 = ratio
+            else:
+                if ratio < t0:
+                    return None
+                if ratio < t1:
+                    t1 = ratio
+
+        clipped_start = (x1 + t0 * dx, y1 + t0 * dy)
+        clipped_end = (x1 + t1 * dx, y1 + t1 * dy)
+        return clipped_start, clipped_end
 
     def _draw_floor_image(self, image_path, corners, world_to_screen):
         """Desenha uma imagem calibrada do piso como malha de quatro cantos."""
@@ -322,8 +509,12 @@ class GraphMapWidget(Widget):
                 continue
             # Arestas verticais ligam pisos diferentes e por isso entram no
             # cálculo da rota, mas não são desenhadas como linha neste piso.
-            x1, y1 = world_to_screen(positions[node_a])
-            x2, y2 = world_to_screen(positions[node_b])
+            start = world_to_screen(positions[node_a])
+            end = world_to_screen(positions[node_b])
+            clipped = self._clip_segment_to_map(start, end)
+            if clipped is None:
+                continue
+            (x1, y1), (x2, y2) = clipped
             Line(points=[x1, y1, x2, y2], width=dp(1.1))
 
     def _draw_route(self, floor_node_set, positions, world_to_screen):
@@ -341,8 +532,12 @@ class GraphMapWidget(Widget):
             # Verde: segmento já confirmado. Vermelho: segmento ainda por fazer.
             color = "#43A047" if index < self.route.current_index else "#D32F2F"
             Color(*get_color_from_hex(color))
-            x1, y1 = world_to_screen(positions[node_a])
-            x2, y2 = world_to_screen(positions[node_b])
+            start = world_to_screen(positions[node_a])
+            end = world_to_screen(positions[node_b])
+            clipped = self._clip_segment_to_map(start, end)
+            if clipped is None:
+                continue
+            (x1, y1), (x2, y2) = clipped
             Line(points=[x1, y1, x2, y2], width=dp(3.2))
 
         origin = self.route.path[0]
@@ -367,6 +562,9 @@ class GraphMapWidget(Widget):
 
     def _draw_marker(self, point, color, radius):
         """Desenha um círculo com contorno branco para representar um nó/marcador."""
+
+        if not self._point_inside_map(point, inset=radius):
+            return
 
         Color(*get_color_from_hex(color))
         Ellipse(pos=(point[0] - radius, point[1] - radius), size=(radius * 2, radius * 2))
@@ -393,11 +591,14 @@ class GraphMapWidget(Widget):
     def _draw_text(self, text, x_value, y_value):
         """Desenha texto no canvas usando CoreLabel, com fundo branco discreto."""
 
+        if not self._point_inside_map((x_value, y_value)):
+            return
+
         label = CoreLabel(text=text, font_size=sp(11), color=(0.04, 0.04, 0.04, 1))
         label.refresh()
         texture = label.texture
         width, height = texture.size
-        with self.canvas:
+        with self._draw_area.canvas:
             Color(1, 1, 1, 0.76)
             Rectangle(
                 pos=(x_value - width / 2 - dp(3), y_value - dp(2)),
@@ -423,7 +624,7 @@ class GraphMapWidget(Widget):
         padding = dp(5)
         x_value = self.right - texture.size[0] - padding * 2
         y_value = self.y + padding
-        with self.canvas:
+        with self._draw_area.canvas:
             Color(1, 1, 1, 0.78)
             Rectangle(
                 pos=(x_value - padding, y_value - padding / 2),
@@ -843,6 +1044,7 @@ class AndroidNavigationApp(App):
         self.planner_map_widget = GraphMapWidget(size_hint_y=1)
         self.planner_map_widget.tile_cache_dir = Path(self.user_data_dir) / "osm_carto_tiles"
         root.add_widget(self.planner_map_widget)
+        root.add_widget(self._build_map_zoom_controls(self.planner_map_widget))
 
         self.planner_status_label = Label(
             text="Escolhe a origem e o destino para começar.",
@@ -916,12 +1118,22 @@ class AndroidNavigationApp(App):
         self.route_map_widget = GraphMapWidget(size_hint_y=1)
         self.route_map_widget.tile_cache_dir = Path(self.user_data_dir) / "osm_carto_tiles"
         root.add_widget(self.route_map_widget)
+        root.add_widget(self._build_map_zoom_controls(self.route_map_widget))
 
         buttons = BoxLayout(size_hint_y=None, height=dp(50), spacing=dp(8))
         buttons.add_widget(Button(text="Próximo ponto", on_release=lambda *_: self.confirm_arrival()))
         buttons.add_widget(Button(text="Cancelar", on_release=lambda *_: self.cancel_route()))
         root.add_widget(buttons)
         return screen
+
+    def _build_map_zoom_controls(self, map_widget):
+        """Cria controlos simples de zoom para o mapa indicado."""
+
+        controls = BoxLayout(size_hint_y=None, height=dp(38), spacing=dp(6))
+        controls.add_widget(Button(text="-", on_release=lambda *_: map_widget.zoom_out()))
+        controls.add_widget(Button(text="+", on_release=lambda *_: map_widget.zoom_in()))
+        controls.add_widget(Button(text="Centrar", on_release=lambda *_: map_widget.center_on_current_route()))
+        return controls
 
     def _build_location_controls(self):
         """Cria os controlos de edifício, piso, sala/entrada e mapa visível."""
