@@ -563,8 +563,13 @@ def read_world_file(image_path: Path):
     }
 
 
-def world_file_corners(world_file: dict, image_size: tuple[int, int]):
-    height, width = image_size[:2]
+def world_file_corners(world_file: dict, image_size: tuple[int, ...]):
+    if len(image_size) >= 3:
+        # matplotlib devolve image.shape como (altura, largura, canais).
+        height, width = image_size[:2]
+    else:
+        # Kivy/CoreImage devolve image.size como (largura, altura).
+        width, height = image_size[:2]
 
     def transform(pixel_x, pixel_y):
         return (
@@ -715,6 +720,64 @@ def edge_name(edge):
     return "a ligação vertical"
 
 
+def turn_instruction(graph, path: list[str], index: int):
+    """
+    Calcula a orientação relativa no ponto atual da rota.
+
+    A instrução só faz sentido quando existe um ponto anterior no mesmo piso:
+    o utilizador veio de `path[index - 1]`, está em `path[index]` e vai seguir
+    para `path[index + 1]`. Ângulos pequenos são tratados como seguir em frente
+    para evitar instruções ruidosas em pequenos desvios do grafo.
+    """
+
+    if index <= 0 or index >= len(path) - 1:
+        return None
+
+    previous = path[index - 1]
+    current = path[index]
+    next_node = path[index + 1]
+    previous_data = graph.nodes[previous]
+    current_data = graph.nodes[current]
+    next_data = graph.nodes[next_node]
+
+    if previous_data.get("floor_key") != current_data.get("floor_key"):
+        return None
+    if current_data.get("floor_key") != next_data.get("floor_key"):
+        return None
+
+    previous_point = lonlat_to_web_mercator(previous_data["lat"], previous_data["lon"])
+    current_point = lonlat_to_web_mercator(current_data["lat"], current_data["lon"])
+    next_point = lonlat_to_web_mercator(next_data["lat"], next_data["lon"])
+    incoming = (
+        current_point[0] - previous_point[0],
+        current_point[1] - previous_point[1],
+    )
+    outgoing = (
+        next_point[0] - current_point[0],
+        next_point[1] - current_point[1],
+    )
+
+    incoming_length = math.hypot(*incoming)
+    outgoing_length = math.hypot(*outgoing)
+    if incoming_length == 0 or outgoing_length == 0:
+        return None
+
+    cross = incoming[0] * outgoing[1] - incoming[1] * outgoing[0]
+    dot = incoming[0] * outgoing[0] + incoming[1] * outgoing[1]
+    angle = math.degrees(math.atan2(cross, dot))
+    absolute_angle = abs(angle)
+
+    if absolute_angle <= 25:
+        return "continua em frente"
+    if absolute_angle >= 150:
+        return "inverte a direção"
+
+    side = "esquerda" if angle > 0 else "direita"
+    if absolute_angle < 60:
+        return f"segue ligeiramente à {side}"
+    return f"vira à {side}"
+
+
 def elevator_exit_index(graph, route: RouteState, start_index):
     index = start_index
     while index < len(route.path) - 1:
@@ -768,10 +831,12 @@ def navigation_instruction(graph, route: RouteState):
 
     next_text = navigation_point_name(graph, next_node)
     distance = edge.get("length", edge.get("weight", 0))
+    turn_text = turn_instruction(graph, path, index)
+    movement = f"{turn_text} e avança {distance:.1f} m" if turn_text else f"avança {distance:.1f} m"
     return (
         f"{progress}\n\n"
         f"Local atual: {current_text}\n"
         f"Próximo ponto: {next_text}\n\n"
-        f"Ação: avança {distance:.1f} m.\n"
+        f"Ação: {movement}.\n"
         "Depois confirma a chegada."
     )

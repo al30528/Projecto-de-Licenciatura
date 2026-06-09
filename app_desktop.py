@@ -679,53 +679,7 @@ class DesktopNavigationApp(tk.Tk):
         if self.route is None:
             return
 
-        path = self.route.path
-        index = self.route.current_index
-
-        if index >= len(path) - 1:
-            current = path[-1]
-            self.step_var.set(
-                f"Destino alcançado\n\n{self._navigation_point_name(current)}"
-            )
-            return
-
-        current = path[index]
-        next_node = path[index + 1]
-        edge = self.graph[current][next_node]
-        progress = f"Passo {index + 1} de {len(path) - 1}"
-        current_text = self._navigation_point_name(current)
-        if edge.get("vertical"):
-            # Ligações verticais são explicadas por ação, não por metros.
-            if edge.get("edge_type") == "elevator":
-                exit_index = self._elevator_exit_index(index)
-                exit_node = path[exit_index]
-                next_text = self._navigation_point_name(exit_node)
-                self.step_var.set(
-                    f"{progress}\n\n"
-                    f"Local atual: {current_text}\n"
-                    f"Próximo ponto: {next_text}\n\n"
-                    "Ação: usa o elevador.\n"
-                    "Depois confirma a chegada."
-                )
-            else:
-                next_text = self._navigation_point_name(next_node)
-                self.step_var.set(
-                    f"{progress}\n\n"
-                    f"Local atual: {current_text}\n"
-                    f"Próximo ponto: {next_text}\n\n"
-                    f"Ação: usa {self._edge_name(edge)}.\n"
-                    "Depois confirma a chegada."
-                )
-        else:
-            next_text = self._navigation_point_name(next_node)
-            # Nas arestas normais, length vem do cálculo de distância entre nós.
-            self.step_var.set(
-                f"{progress}\n\n"
-                f"Local atual: {current_text}\n"
-                f"Próximo ponto: {next_text}\n\n"
-                f"Ação: avança {edge.get('length', edge.get('weight', 0)):.1f} m.\n"
-                "Depois confirma a chegada."
-            )
+        self.step_var.set(nav.navigation_instruction(self.graph, self.route))
 
     def _elevator_exit_index(self, start_index):
         """Encontra o nó onde termina uma sequência contínua de elevador."""
