@@ -135,7 +135,7 @@ def build_graph(nodes, edges):
             
             # Extrair acessibilidade da aresta (default = 5, totalmente acessível)
             accessibility = int(way_tags.get('accessibility', 5))
-            edge_type = way_tags.get('type', 'connection')
+            edge_type = way_tags.get('edge_type', 'connection')
             
             G.add_edge(
                 n1, n2,

@@ -265,10 +265,10 @@ def build_graph(nodes, edges):
             # `length` é o mesmo valor arredondado para as instruções visuais.
             length=round(distance, 2),
             way_id=way_id,
-            edge_type=way_tags.get("type", "connection"),
+            edge_type=way_tags.get("edge_type", "connection"),
             accessibility=read_int_tag(
                 way_tags,
-                keys=("accessibility", "accessibilty"),
+                keys=("accessibility",),
                 default=1,
             ),
         )

@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <osm version='0.6' generator='JOSM'>
   <node id='-27159' action='modify' visible='true' lat='41.28590946394' lon='-7.74354463577'>
-    <tag k='accessibilty' v='2' />
+    <tag k='accessibility' v='2' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='1' />
@@ -10,7 +10,7 @@
     <tag k='type' v='outdoor' />
   </node>
   <node id='-27160' action='modify' visible='true' lat='41.28582405779' lon='-7.74358235433'>
-    <tag k='accessibilty' v='1' />
+    <tag k='accessibility' v='1' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='2' />
@@ -18,7 +18,7 @@
     <tag k='type' v='connection' />
   </node>
   <node id='-27161' action='modify' visible='true' lat='41.2858850257' lon='-7.74383716352'>
-    <tag k='accessibilty' v='1' />
+    <tag k='accessibility' v='1' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='37' />
@@ -26,7 +26,7 @@
     <tag k='type' v='room' />
   </node>
   <node id='-27162' action='modify' visible='true' lat='41.2859056844' lon='-7.74382777579'>
-    <tag k='accessibilty' v='1' />
+    <tag k='accessibility' v='1' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='38' />
@@ -34,7 +34,7 @@
     <tag k='type' v='room' />
   </node>
   <node id='-27163' action='modify' visible='true' lat='41.28589308763' lon='-7.74378284879'>
-    <tag k='accessibilty' v='1' />
+    <tag k='accessibility' v='1' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='35' />
@@ -42,7 +42,7 @@
     <tag k='type' v='room' />
   </node>
   <node id='-27164' action='modify' visible='true' lat='41.28587293279' lon='-7.74379156597'>
-    <tag k='accessibilty' v='1' />
+    <tag k='accessibility' v='1' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='34' />
@@ -50,7 +50,7 @@
     <tag k='type' v='room' />
   </node>
   <node id='-27165' action='modify' visible='true' lat='41.28587948312' lon='-7.74373121627'>
-    <tag k='accessibilty' v='1' />
+    <tag k='accessibility' v='1' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='31' />
@@ -58,7 +58,7 @@
     <tag k='type' v='room' />
   </node>
   <node id='-27166' action='modify' visible='true' lat='41.28585983215' lon='-7.74374261566'>
-    <tag k='accessibilty' v='1' />
+    <tag k='accessibility' v='1' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='30' />
@@ -66,7 +66,7 @@
     <tag k='type' v='room' />
   </node>
   <node id='-27167' action='modify' visible='true' lat='41.28582204181' lon='-7.74364203282'>
-    <tag k='accessibilty' v='1' />
+    <tag k='accessibility' v='1' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='10' />
@@ -74,7 +74,7 @@
     <tag k='type' v='connection' />
   </node>
   <node id='-27168' action='modify' visible='true' lat='41.28588401796' lon='-7.74365242638'>
-    <tag k='accessibilty' v='3' />
+    <tag k='accessibility' v='3' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='26' />
@@ -83,7 +83,7 @@
     <tag k='type' v='elevator' />
   </node>
   <node id='-27169' action='modify' visible='true' lat='41.28585832054' lon='-7.74369366534'>
-    <tag k='accessibilty' v='1' />
+    <tag k='accessibility' v='1' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='17' />
@@ -91,7 +91,7 @@
     <tag k='type' v='connection' />
   </node>
   <node id='-27170' action='modify' visible='true' lat='41.2858510144' lon='-7.74366516687'>
-    <tag k='accessibilty' v='1' />
+    <tag k='accessibility' v='1' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='11' />
@@ -99,7 +99,7 @@
     <tag k='type' v='connection' />
   </node>
   <node id='-27171' action='modify' visible='true' lat='41.28586990957' lon='-7.74373658068'>
-    <tag k='accessibilty' v='1' />
+    <tag k='accessibility' v='1' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='24' />
@@ -107,7 +107,7 @@
     <tag k='type' v='connection' />
   </node>
   <node id='-27172' action='modify' visible='true' lat='41.28588351408' lon='-7.74378821321'>
-    <tag k='accessibilty' v='1' />
+    <tag k='accessibility' v='1' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='29' />
@@ -115,7 +115,7 @@
     <tag k='type' v='connection' />
   </node>
   <node id='-27173' action='modify' visible='true' lat='41.28589409537' lon='-7.7438317991'>
-    <tag k='accessibilty' v='1' />
+    <tag k='accessibility' v='1' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='33' />
@@ -123,7 +123,7 @@
     <tag k='type' v='connection' />
   </node>
   <node id='-27174' action='modify' visible='true' lat='41.28571975584' lon='-7.74363063343'>
-    <tag k='accessibilty' v='1' />
+    <tag k='accessibility' v='1' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='3' />
@@ -131,7 +131,7 @@
     <tag k='type' v='connection' />
   </node>
   <node id='-27175' action='modify' visible='true' lat='41.28565777954' lon='-7.74340599842'>
-    <tag k='accessibilty' v='1' />
+    <tag k='accessibility' v='1' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='6' />
@@ -139,7 +139,7 @@
     <tag k='type' v='connection' />
   </node>
   <node id='-27176' action='modify' visible='true' lat='41.28564870983' lon='-7.74341002174'>
-    <tag k='accessibilty' v='1' />
+    <tag k='accessibility' v='1' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='13' />
@@ -147,7 +147,7 @@
     <tag k='type' v='room' />
   </node>
   <node id='-27177' action='modify' visible='true' lat='41.28582594681' lon='-7.74352300979'>
-    <tag k='accessibilty' v='1' />
+    <tag k='accessibility' v='1' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='9' />
@@ -155,7 +155,7 @@
     <tag k='type' v='room' />
   </node>
   <node id='-27178' action='modify' visible='true' lat='41.28578979403' lon='-7.74353943832'>
-    <tag k='accessibilty' v='1' />
+    <tag k='accessibility' v='1' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='8' />
@@ -163,7 +163,7 @@
     <tag k='type' v='room' />
   </node>
   <node id='-27179' action='modify' visible='true' lat='41.28580742954' lon='-7.7435327328'>
-    <tag k='accessibilty' v='1' />
+    <tag k='accessibility' v='1' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='4' />
@@ -171,7 +171,7 @@
     <tag k='type' v='connection' />
   </node>
   <node id='-27180' action='modify' visible='true' lat='41.28581649922' lon='-7.74348445304'>
-    <tag k='accessibilty' v='1' />
+    <tag k='accessibility' v='1' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='16' />
@@ -179,7 +179,7 @@
     <tag k='type' v='room' />
   </node>
   <node id='-27181' action='modify' visible='true' lat='41.28577820499' lon='-7.74349853463'>
-    <tag k='accessibilty' v='1' />
+    <tag k='accessibility' v='1' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='15' />
@@ -187,7 +187,7 @@
     <tag k='type' v='room' />
   </node>
   <node id='-27182' action='modify' visible='true' lat='41.28579634436' lon='-7.74349048801'>
-    <tag k='accessibilty' v='1' />
+    <tag k='accessibility' v='1' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='7' />
@@ -195,7 +195,7 @@
     <tag k='type' v='connection' />
   </node>
   <node id='-27183' action='modify' visible='true' lat='41.28578828242' lon='-7.7434583015'>
-    <tag k='accessibilty' v='1' />
+    <tag k='accessibility' v='1' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='14' />
@@ -203,7 +203,7 @@
     <tag k='type' v='connection' />
   </node>
   <node id='-27184' action='modify' visible='true' lat='41.28579936759' lon='-7.74341940947'>
-    <tag k='accessibilty' v='1' />
+    <tag k='accessibility' v='1' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='22' />
@@ -211,7 +211,7 @@
     <tag k='type' v='room' />
   </node>
   <node id='-27185' action='modify' visible='true' lat='41.28578022047' lon='-7.74340801008'>
-    <tag k='accessibilty' v='1' />
+    <tag k='accessibility' v='1' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='21' />
@@ -219,7 +219,7 @@
     <tag k='type' v='room' />
   </node>
   <node id='-27186' action='modify' visible='true' lat='41.28575401914' lon='-7.74345561929'>
-    <tag k='accessibilty' v='1' />
+    <tag k='accessibility' v='1' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='28' />
@@ -227,7 +227,7 @@
     <tag k='type' v='room' />
   </node>
   <node id='-27187' action='modify' visible='true' lat='41.28573638362' lon='-7.74347640641'>
-    <tag k='accessibilty' v='1' />
+    <tag k='accessibility' v='1' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='27' />
@@ -235,7 +235,7 @@
     <tag k='type' v='room' />
   </node>
   <node id='-27188' action='modify' visible='true' lat='41.28589560673' lon='-7.74368025396'>
-    <tag k='accessibilty' v='2' />
+    <tag k='accessibility' v='2' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='32' />
@@ -244,7 +244,7 @@
     <tag k='type' v='stairs' />
   </node>
   <node id='-27189' action='modify' visible='true' lat='41.28583740963' lon='-7.74370238218'>
-    <tag k='accessibilty' v='1' />
+    <tag k='accessibility' v='1' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='23' />
@@ -252,7 +252,7 @@
     <tag k='type' v='connection' />
   </node>
   <node id='-27190' action='modify' visible='true' lat='41.28591324246' lon='-7.7438599623'>
-    <tag k='accessibilty' v='1' />
+    <tag k='accessibility' v='1' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='40' />
@@ -260,7 +260,7 @@
     <tag k='type' v='room' />
   </node>
   <node id='-27191' action='modify' visible='true' lat='41.28590366892' lon='-7.74386331506'>
-    <tag k='accessibilty' v='1' />
+    <tag k='accessibility' v='1' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='36' />
@@ -268,7 +268,7 @@
     <tag k='type' v='connection' />
   </node>
   <node id='-27192' action='modify' visible='true' lat='41.28589308763' lon='-7.74386800893'>
-    <tag k='accessibilty' v='1' />
+    <tag k='accessibility' v='1' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='39' />
@@ -276,7 +276,7 @@
     <tag k='type' v='room' />
   </node>
   <node id='-27193' action='modify' visible='true' lat='41.28587998674' lon='-7.74362191591'>
-    <tag k='accessibilty' v='2' />
+    <tag k='accessibility' v='2' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='19' />
@@ -285,7 +285,7 @@
     <tag k='type' v='stairs' />
   </node>
   <node id='-27194' action='modify' visible='true' lat='41.28588426964' lon='-7.74368293617'>
-    <tag k='accessibilty' v='1' />
+    <tag k='accessibility' v='1' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='25' />
@@ -293,7 +293,7 @@
     <tag k='type' v='connection' />
   </node>
   <node id='-27195' action='modify' visible='true' lat='41.28586814577' lon='-7.74362660978'>
-    <tag k='accessibilty' v='1' />
+    <tag k='accessibility' v='1' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='12' />
@@ -301,7 +301,7 @@
     <tag k='type' v='connection' />
   </node>
   <node id='-27196' action='modify' visible='true' lat='41.2858754519' lon='-7.7436557788'>
-    <tag k='accessibilty' v='1' />
+    <tag k='accessibility' v='1' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='18' />
@@ -309,7 +309,7 @@
     <tag k='type' v='connection' />
   </node>
   <node id='-27197' action='modify' visible='true' lat='41.28584270028' lon='-7.74363532696'>
-    <tag k='accessibilty' v='1' />
+    <tag k='accessibility' v='1' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='5' />
@@ -317,7 +317,7 @@
     <tag k='type' v='connection' />
   </node>
   <node id='-27198' action='modify' visible='true' lat='41.28575779793' lon='-7.74346869472'>
-    <tag k='accessibilty' v='1' />
+    <tag k='accessibility' v='1' />
     <tag k='building' v='ECT2' />
     <tag k='floor' v='1' />
     <tag k='nodeID' v='20' />
@@ -327,237 +327,276 @@
   <way id='-1900' action='modify' visible='true'>
     <nd ref='-27162' />
     <nd ref='-27173' />
-    <tag k='accessibilty' v='1' />
-    <tag k='bidirrectional' v='true' />
-    <tag k='type' v='connection' />
+    <tag k='accessibility' v='1' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1901' action='modify' visible='true'>
     <nd ref='-27161' />
     <nd ref='-27173' />
-    <tag k='accessibilty' v='1' />
-    <tag k='bidirrectional' v='true' />
-    <tag k='type' v='connection' />
+    <tag k='accessibility' v='1' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1902' action='modify' visible='true'>
     <nd ref='-27164' />
     <nd ref='-27172' />
-    <tag k='accessibilty' v='1' />
-    <tag k='bidirrectional' v='true' />
-    <tag k='type' v='connection' />
+    <tag k='accessibility' v='1' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1903' action='modify' visible='true'>
     <nd ref='-27163' />
     <nd ref='-27172' />
-    <tag k='accessibilty' v='1' />
-    <tag k='bidirrectional' v='true' />
-    <tag k='type' v='connection' />
+    <tag k='accessibility' v='1' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1904' action='modify' visible='true'>
     <nd ref='-27165' />
     <nd ref='-27171' />
-    <tag k='accessibilty' v='1' />
-    <tag k='bidirrectional' v='true' />
-    <tag k='type' v='connection' />
+    <tag k='accessibility' v='1' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1905' action='modify' visible='true'>
     <nd ref='-27166' />
     <nd ref='-27171' />
-    <tag k='accessibilty' v='1' />
-    <tag k='bidirrectional' v='true' />
-    <tag k='type' v='connection' />
+    <tag k='accessibility' v='1' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1906' action='modify' visible='true'>
     <nd ref='-27179' />
     <nd ref='-27177' />
-    <tag k='accessibilty' v='1' />
-    <tag k='bidirrectional' v='true' />
-    <tag k='type' v='connection' />
+    <tag k='accessibility' v='1' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1907' action='modify' visible='true'>
     <nd ref='-27182' />
     <nd ref='-27179' />
-    <tag k='accessibilty' v='1' />
-    <tag k='bidirrectional' v='true' />
-    <tag k='type' v='connection' />
+    <tag k='accessibility' v='1' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1908' action='modify' visible='true'>
     <nd ref='-27178' />
     <nd ref='-27179' />
-    <tag k='accessibilty' v='1' />
-    <tag k='bidirrectional' v='true' />
-    <tag k='type' v='connection' />
+    <tag k='accessibility' v='1' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1909' action='modify' visible='true'>
     <nd ref='-27180' />
     <nd ref='-27182' />
-    <tag k='accessibilty' v='1' />
-    <tag k='bidirrectional' v='true' />
-    <tag k='type' v='connection' />
+    <tag k='accessibility' v='1' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1910' action='modify' visible='true'>
     <nd ref='-27181' />
     <nd ref='-27182' />
-    <tag k='accessibilty' v='1' />
-    <tag k='bidirrectional' v='true' />
-    <tag k='type' v='connection' />
+    <tag k='accessibility' v='1' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1911' action='modify' visible='true'>
     <nd ref='-27183' />
     <nd ref='-27182' />
-    <tag k='accessibilty' v='1' />
-    <tag k='bidirrectional' v='true' />
-    <tag k='type' v='connection' />
+    <tag k='accessibility' v='1' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1912' action='modify' visible='true'>
     <nd ref='-27184' />
     <nd ref='-27183' />
-    <tag k='accessibilty' v='1' />
-    <tag k='bidirrectional' v='true' />
-    <tag k='type' v='connection' />
+    <tag k='accessibility' v='1' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1913' action='modify' visible='true'>
     <nd ref='-27185' />
     <nd ref='-27183' />
-    <tag k='accessibilty' v='1' />
-    <tag k='bidirrectional' v='true' />
-    <tag k='type' v='connection' />
+    <tag k='accessibility' v='1' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1914' action='modify' visible='true'>
     <nd ref='-27176' />
     <nd ref='-27175' />
-    <tag k='accessibilty' v='1' />
-    <tag k='bidirrectional' v='true' />
-    <tag k='type' v='connection' />
+    <tag k='accessibility' v='1' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1915' action='modify' visible='true'>
     <nd ref='-27174' />
     <nd ref='-27175' />
-    <tag k='accessibilty' v='1' />
-    <tag k='bidirrectional' v='true' />
-    <tag k='type' v='connection' />
+    <tag k='accessibility' v='1' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1916' action='modify' visible='true'>
     <nd ref='-27159' />
     <nd ref='-27160' />
-    <tag k='accessibilty' v='2' />
-    <tag k='bidirrectional' v='true' />
-    <tag k='type' v='connection' />
+    <tag k='accessibility' v='2' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1917' action='modify' visible='true'>
     <nd ref='-27170' />
     <nd ref='-27169' />
+    <tag k='accessibility' v='1' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1918' action='modify' visible='true'>
     <nd ref='-27171' />
     <nd ref='-27169' />
-    <tag k='accessibilty' v='1' />
-    <tag k='bidirrectional' v='true' />
-    <tag k='type' v='connection' />
+    <tag k='accessibility' v='1' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1919' action='modify' visible='true'>
     <nd ref='-27171' />
     <nd ref='-27172' />
-    <tag k='accessibilty' v='1' />
-    <tag k='bidirrectional' v='true' />
-    <tag k='type' v='connection' />
+    <tag k='accessibility' v='1' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1920' action='modify' visible='true'>
     <nd ref='-27173' />
     <nd ref='-27172' />
-    <tag k='accessibilty' v='1' />
-    <tag k='bidirrectional' v='true' />
-    <tag k='type' v='connection' />
+    <tag k='accessibility' v='1' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1921' action='modify' visible='true'>
     <nd ref='-27169' />
     <nd ref='-27189' />
-    <tag k='accessibilty' v='1' />
-    <tag k='bidirrectional' v='true' />
-    <tag k='type' v='connection' />
+    <tag k='accessibility' v='1' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1922' action='modify' visible='true'>
     <nd ref='-27160' />
     <nd ref='-27174' />
-    <tag k='accessibilty' v='1' />
-    <tag k='bidirrectional' v='true' />
-    <tag k='type' v='connection' />
+    <tag k='accessibility' v='1' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1923' action='modify' visible='true'>
     <nd ref='-27179' />
     <nd ref='-27160' />
-    <tag k='accessibilty' v='1' />
-    <tag k='bidirrectional' v='true' />
-    <tag k='type' v='connection' />
+    <tag k='accessibility' v='1' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1924' action='modify' visible='true'>
     <nd ref='-27173' />
     <nd ref='-27191' />
-    <tag k='accessibilty' v='1' />
-    <tag k='bidirrectional' v='true' />
-    <tag k='type' v='connection' />
+    <tag k='accessibility' v='1' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1925' action='modify' visible='true'>
     <nd ref='-27190' />
     <nd ref='-27191' />
-    <tag k='accessibilty' v='1' />
-    <tag k='bidirrectional' v='true' />
-    <tag k='type' v='connection' />
+    <tag k='accessibility' v='1' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1926' action='modify' visible='true'>
     <nd ref='-27192' />
     <nd ref='-27191' />
-    <tag k='accessibilty' v='1' />
-    <tag k='bidirrectional' v='true' />
-    <tag k='type' v='connection' />
+    <tag k='accessibility' v='1' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1927' action='modify' visible='true'>
     <nd ref='-27188' />
     <nd ref='-27194' />
+    <tag k='accessibility' v='2' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1928' action='modify' visible='true'>
     <nd ref='-27169' />
     <nd ref='-27194' />
+    <tag k='accessibility' v='1' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1929' action='modify' visible='true'>
     <nd ref='-27193' />
     <nd ref='-27195' />
     <nd ref='-27196' />
     <nd ref='-27194' />
+    <tag k='accessibility' v='2' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1930' action='modify' visible='true'>
     <nd ref='-27196' />
     <nd ref='-27168' />
+    <tag k='accessibility' v='3' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1931' action='modify' visible='true'>
     <nd ref='-27170' />
     <nd ref='-27196' />
+    <tag k='accessibility' v='1' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1932' action='modify' visible='true'>
     <nd ref='-27197' />
     <nd ref='-27195' />
+    <tag k='accessibility' v='1' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1933' action='modify' visible='true'>
     <nd ref='-27167' />
     <nd ref='-27197' />
+    <tag k='accessibility' v='1' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1934' action='modify' visible='true'>
     <nd ref='-27170' />
     <nd ref='-27197' />
+    <tag k='accessibility' v='1' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1935' action='modify' visible='true'>
     <nd ref='-27160' />
     <nd ref='-27197' />
+    <tag k='accessibility' v='1' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1936' action='modify' visible='true'>
     <nd ref='-27183' />
     <nd ref='-27198' />
+    <tag k='accessibility' v='1' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1937' action='modify' visible='true'>
     <nd ref='-27186' />
     <nd ref='-27198' />
+    <tag k='accessibility' v='1' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
   <way id='-1938' action='modify' visible='true'>
     <nd ref='-27187' />
     <nd ref='-27198' />
+    <tag k='accessibility' v='1' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
   </way>
 </osm>

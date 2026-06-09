@@ -9,7 +9,7 @@ O que mudou em relação à versão usada no Spyder/Anaconda:
     - permite escolher o piso pelo terminal: --piso Piso1 / Piso2 / Piso3 / Exterior;
     - permite indicar origem/destino pelo nodeID lógico ou pelo ID OSM;
     - evita caminhos fixos dependentes do Spyder;
-    - aceita tanto a tag "accessibility" como a tag escrita no OSM como "accessibilty".
+    - usa a tag "accessibility" para classificar a acessibilidade das arestas.
 
 Requisitos:
     pip install matplotlib networkx
@@ -58,10 +58,7 @@ OSM_FILES = {
 # =============================================================================
 
 def read_int_tag(tags: dict[str, str], keys: tuple[str, ...], default: int) -> int:
-    """
-    Lê uma tag inteira com tolerância para nomes diferentes.
-    No teu OSM apareceu várias vezes "accessibilty" sem o segundo "i".
-    """
+    """Lê uma tag inteira a partir de uma lista de nomes aceites."""
     for key in keys:
         value = tags.get(key)
         if value is not None:
@@ -217,13 +214,12 @@ def build_graph(nodes, edges):
                 nodes[n2]["lon"],
             )
 
-            # Aceita "accessibility" e também "accessibilty".
             accessibility = read_int_tag(
                 way_tags,
-                keys=("accessibility", "accessibilty"),
+                keys=("accessibility",),
                 default=1,
             )
-            edge_type = way_tags.get("type", "connection")
+            edge_type = way_tags.get("edge_type", "connection")
 
             graph.add_edge(
                 n1,
@@ -568,7 +564,7 @@ def list_named_nodes(graph):
                 "tipo": data.get("type", "?"),
                 "piso": data.get("floor", "?"),
                 "edificio": data.get("building", "?"),
-                "accessibility": data.get("accessibility", data.get("accessibilty", "?")),
+                "accessibility": data.get("accessibility", "?"),
             })
 
     def sort_key(item):
