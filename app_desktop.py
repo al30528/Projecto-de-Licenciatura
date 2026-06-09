@@ -2,8 +2,8 @@
 """
 Protótipo desktop para navegação pedestre indoor na UTAD.
 
-Esta interface reutiliza a lógica existente em navegacao_campus_vscode.py e
-mantém os ficheiros .osm sem alterações.
+Esta interface reutiliza o core comum de navegação e mantém os ficheiros .osm
+sem alterações.
 """
 
 from __future__ import annotations
@@ -12,287 +12,39 @@ import math
 import tkinter as tk
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
 from pathlib import Path
 from tkinter import messagebox, ttk
 
-import networkx as nx
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 from matplotlib import image as mpimg
 from matplotlib.transforms import Affine2D
 
-from navegacao_campus_vscode import (
-    BASE_DIR,
-    OSM_FILES,
-    build_graph,
-    get_node_color,
-    get_node_label,
-    parse_osm,
-    resolve_node,
-)
+import navigation_core as nav
 
 
-# Caminhos e constantes usados pela app desktop. A pasta BASE_DIR vem do script
-# principal e permite correr a app a partir de qualquer terminal sem caminhos
-# absolutos dependentes do computador.
-IMAGE_DIR = BASE_DIR / "Imagens ECT2"
-FLOOR_IMAGES = {
-    "Piso1": IMAGE_DIR / "Piso 1.jpg",
-    "Piso2": IMAGE_DIR / "Piso2.png",
-    "Piso3": IMAGE_DIR / "Piso 3.jpg",
-}
-INDOOR_FLOORS = ["Piso1", "Piso2", "Piso3"]
-APP_FLOORS = ["Exterior", *INDOOR_FLOORS]
-BUILDING_ORDER = ["ECT1", "ECT2", "ECHS2"]
+# Caminhos, constantes e funções vindos do core comum. A app desktop fica assim
+# responsável pela interface e desenho, enquanto o core trata de OSM/grafo/rota.
+BASE_DIR = nav.BASE_DIR
+FLOOR_IMAGES = nav.FLOOR_IMAGES
+INDOOR_FLOORS = nav.INDOOR_FLOORS
+APP_FLOORS = nav.APP_FLOORS
+BUILDING_ORDER = nav.BUILDING_ORDER
+RouteState = nav.RouteState
+build_campus_graph = nav.build_campus_graph
+calculate_path = nav.calculate_path
+get_node_color = nav.node_color
+get_node_label = nav.node_label
+lonlat_to_web_mercator = nav.lonlat_to_web_mercator
+read_world_file = nav.read_world_file
+world_file_corners = nav.world_file_corners
+world_file_path = nav.world_file_path
+web_mercator_to_tile = nav.web_mercator_to_tile
+tile_web_mercator_extent = nav.tile_web_mercator_extent
 TILE_CACHE_DIR = BASE_DIR / ".tile_cache" / "osm_carto"
-OSM_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-OSM_TILE_USER_AGENT = "UTADIndoorNavigationPrototype/0.1 (academic project)"
-EXTERIOR_TILE_ZOOM = 18
-WEB_MERCATOR_LIMIT = 20037508.342789244
-
-
-@dataclass
-class RouteState:
-    """Guarda a rota atual e o ponto onde o utilizador está na navegação."""
-
-    graph: object
-    path: list[str]
-    distance: float
-    current_index: int = 0
-
-
-def floor_number(floor: str) -> int | None:
-    """Extrai o número de um piso como 'Piso3'. Devolve None para 'Exterior'."""
-
-    digits = "".join(char for char in floor if char.isdigit())
-    return int(digits) if digits else None
-
-
-def floor_node_id(floor: str, node_id: str) -> str:
-    """Cria um ID único no grafo global juntando piso e ID original OSM."""
-
-    return f"{floor}:{node_id}"
-
-
-def vertical_edge_weight(from_node: dict, to_node: dict, edge_type: str) -> float:
-    """
-    Define o custo artificial de mudar de piso por elevador ou escadas.
-
-    Nos corredores normais, o peso da aresta vem da distância real entre dois
-    nós. Nas mudanças de piso não existe uma distância horizontal útil para
-    representar o esforço, por isso usamos um custo por piso:
-    - elevador: 8 unidades por piso, porque é mais cómodo/acessível;
-    - escadas: 12 unidades por piso, porque exige mais esforço.
-
-    Este valor entra no mesmo campo `weight` usado pelo Dijkstra/NetworkX.
-    """
-
-    first_floor = int(from_node.get("floor", 0) or 0)
-    second_floor = int(to_node.get("floor", 0) or 0)
-    floor_delta = max(1, abs(first_floor - second_floor))
-    return 8.0 * floor_delta if edge_type == "elevator" else 12.0 * floor_delta
-
-
-def build_campus_graph():
-    """
-    Junta todos os ficheiros OSM num único grafo navegável.
-
-    Cada piso/exterior é lido como grafo separado, depois os nós são copiados
-    para um grafo global com prefixo do piso. No fim são acrescentadas ligações
-    verticais e transições identificadas pelas labels dos nós OSM.
-    """
-
-    campus_graph = nx.Graph()
-    floor_graphs = {}
-
-    for floor in APP_FLOORS:
-        graph = build_graph(*parse_osm(OSM_FILES[floor]))
-        floor_graphs[floor] = graph
-
-        for node_id, data in graph.nodes(data=True):
-            campus_graph.add_node(
-                floor_node_id(floor, node_id),
-                **data,
-                original_id=node_id,
-                floor_key=floor,
-            )
-
-        for node_a, node_b, data in graph.edges(data=True):
-            campus_graph.add_edge(
-                floor_node_id(floor, node_a),
-                floor_node_id(floor, node_b),
-                **data,
-                vertical=False,
-            )
-
-    add_vertical_connections(campus_graph)
-    add_exterior_transition_connections(campus_graph)
-    return campus_graph, floor_graphs
-
-
-def add_vertical_connections(campus_graph):
-    """Liga nós de elevador entre pisos adjacentes."""
-
-    nodes = list(campus_graph.nodes(data=True))
-
-    elevator_nodes = [
-        (node_id, data)
-        for node_id, data in nodes
-        if data.get("type") == "elevator"
-    ]
-    elevator_nodes.sort(key=lambda item: floor_number(item[1].get("floor_key", "")) or 0)
-    for index, (node_id, data) in enumerate(elevator_nodes):
-        for other_id, other_data in elevator_nodes[index + 1:]:
-            if abs(
-                (floor_number(data.get("floor_key", "")) or 0)
-                - (floor_number(other_data.get("floor_key", "")) or 0)
-            ) == 1:
-                add_vertical_edge(campus_graph, node_id, data, other_id, other_data, "elevator")
-
-
-def exterior_transition_edge_type(data_a: dict, data_b: dict):
-    """Escolhe o tipo de aresta de transição com base nos tipos dos nós ligados."""
-
-    types = {data_a.get("type"), data_b.get("type")}
-    if "elevator" in types:
-        return "elevator"
-    if "stairs" in types:
-        return "stairs"
-    if "rampa" in types or "ramp" in types:
-        return "ramp"
-    return "connection"
-
-
-def add_exterior_transition_connections(campus_graph):
-    """Procura nós com tag 'transition' e liga os que pertencem ao mesmo grupo."""
-
-    transition_nodes = [
-        (node_id, data)
-        for node_id, data in campus_graph.nodes(data=True)
-        if data.get("transition")
-    ]
-
-    add_matching_transition_group_edges(campus_graph, transition_nodes)
-
-
-def add_matching_transition_group_edges(campus_graph, transition_nodes):
-    """Agrupa transições pela mesma label e cria arestas entre todos os pares."""
-
-    groups = {}
-    for node_id, data in transition_nodes:
-        for label in transition_labels(data):
-            groups.setdefault(label, []).append((node_id, data))
-
-    for group_nodes in groups.values():
-        if len(group_nodes) < 2:
-            continue
-        for index, (node_id, data) in enumerate(group_nodes):
-            for other_id, other_data in group_nodes[index + 1:]:
-                if campus_graph.has_edge(node_id, other_id):
-                    continue
-                edge_type = exterior_transition_edge_type(data, other_data)
-                add_transition_edge(campus_graph, node_id, data, other_id, other_data, edge_type)
-
-
-def transition_labels(data: dict):
-    """Lê uma ou mais labels de transição separadas por ponto e vírgula."""
-
-    value = str(data.get("transition", "")).strip()
-    if not value:
-        return []
-    return [
-        label.strip().upper()
-        for label in value.split(";")
-        if label.strip()
-    ]
-
-
-def add_vertical_edge(campus_graph, node_a, data_a, node_b, data_b, edge_type):
-    """Acrescenta uma aresta vertical, usada sobretudo para o elevador."""
-
-    accessibility = 3 if edge_type == "elevator" else 2
-    weight = vertical_edge_weight(data_a, data_b, edge_type)
-    # `weight` é o custo usado no cálculo da rota. `length` é o valor mostrado
-    # ao utilizador quando for necessário apresentar uma distância/ação.
-    # Aqui os dois ficam iguais porque a ligação vertical usa custo artificial.
-    campus_graph.add_edge(
-        node_a,
-        node_b,
-        weight=weight,
-        length=weight,
-        way_id=f"{edge_type}:{node_a}->{node_b}",
-        edge_type=edge_type,
-        accessibility=accessibility,
-        vertical=True,
-    )
-
-
-def add_transition_edge(campus_graph, node_a, data_a, node_b, data_b, edge_type):
-    """Acrescenta uma ligação entre mapas/pisos baseada em tags de transição."""
-
-    # Para ligar exterior/interior, primeiro convertemos latitude/longitude para
-    # Web Mercator. Assim `math.dist` calcula uma distância aproximada em metros
-    # no mesmo sistema de coordenadas usado para desenhar os mapas.
-    distance = math.dist(
-        lonlat_to_web_mercator(data_a["lat"], data_a["lon"]),
-        lonlat_to_web_mercator(data_b["lat"], data_b["lon"]),
-    )
-    accessibility = 3 if edge_type == "elevator" else 2 if edge_type == "stairs" else 4
-    # `weight` fica com a distância completa para o algoritmo; `length` é
-    # arredondado só para ser apresentado de forma mais limpa na interface.
-    campus_graph.add_edge(
-        node_a,
-        node_b,
-        weight=distance,
-        length=round(distance, 2),
-        way_id=f"transition:{node_a}->{node_b}",
-        edge_type=edge_type,
-        accessibility=accessibility,
-        vertical=edge_type in {"stairs", "elevator"},
-        transition=True,
-    )
-
-
-def calculate_path(graph, origin, destination, mobility_reduced=False):
-    """
-    Calcula o caminho mais curto respeitando o perfil do utilizador.
-
-    - Mobilidade reduzida: remove arestas de escadas.
-    - Perfil normal: remove arestas de elevador.
-
-    O algoritmo usado aqui é o Dijkstra através do NetworkX. Quando chamamos
-    `nx.shortest_path(..., weight="weight")`, o NetworkX procura a sequência de
-    nós cuja soma dos pesos das arestas é a menor possível. Na prática:
-    - cada corredor tem `weight` igual aos metros entre os nós OSM;
-    - cada transição exterior/interior tem `weight` aproximado em metros;
-    - escadas/elevador têm `weight` artificial para representar esforço/tempo.
-    """
-
-    # Primeiro criamos uma cópia filtrada do grafo. É mais simples remover as
-    # arestas proibidas pelo perfil do utilizador e depois correr Dijkstra sobre
-    # o grafo resultante.
-    route_graph = nx.Graph()
-    route_graph.add_nodes_from(graph.nodes(data=True))
-    for node_a, node_b, data in graph.edges(data=True):
-        edge_type = data.get("edge_type")
-        if mobility_reduced and edge_type == "stairs":
-            continue
-        if not mobility_reduced and edge_type == "elevator":
-            continue
-        route_graph.add_edge(node_a, node_b, **data)
-
-    try:
-        # Dijkstra devolve a lista de nós da rota. Exemplo:
-        # Exterior:1 -> Piso1:3 -> Piso1:4 -> Piso2:...
-        path = nx.shortest_path(route_graph, origin, destination, weight="weight")
-        # Aqui calculamos a soma dos mesmos `weight` usados para escolher a rota.
-        # É este valor que aparece como distância total na app.
-        distance = nx.shortest_path_length(route_graph, origin, destination, weight="weight")
-    except (nx.NetworkXNoPath, nx.NodeNotFound):
-        return None, float("inf")
-
-    return path, round(distance, 2)
+OSM_TILE_URL = nav.OSM_TILE_URL
+OSM_TILE_USER_AGENT = nav.OSM_TILE_USER_AGENT
+EXTERIOR_TILE_ZOOM = nav.EXTERIOR_TILE_ZOOM
 
 
 def read_piclayer_calibration(image_path: Path):
@@ -318,83 +70,6 @@ def read_piclayer_calibration(image_path: Path):
         return None
 
     return calibration
-
-
-def world_file_path(image_path: Path):
-    """Procura o world file correspondente à imagem do piso."""
-
-    candidates = [
-        image_path.with_suffix(".jgw"),
-        image_path.with_suffix(".pgw"),
-        image_path.with_suffix(".jpgw"),
-        image_path.with_suffix(".pngw"),
-    ]
-    return next((path for path in candidates if path.exists()), None)
-
-
-def read_world_file(image_path: Path):
-    """Lê os seis valores de um world file (.jgw/.pgw/etc.)."""
-
-    path = world_file_path(image_path)
-    if path is None:
-        return None
-
-    values = [
-        float(line.strip())
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
-    if len(values) != 6:
-        return None
-
-    return {
-        "path": path,
-        "a": values[0],
-        "d": values[1],
-        "b": values[2],
-        "e": values[3],
-        "c": values[4],
-        "f": values[5],
-    }
-
-
-def lonlat_to_web_mercator(lat: float, lon: float):
-    """Converte latitude/longitude para Web Mercator, usado por OSM tiles."""
-
-    earth_radius = 6378137
-    x_value = earth_radius * math.radians(lon)
-    y_value = earth_radius * math.log(math.tan(math.pi / 4 + math.radians(lat) / 2))
-    return x_value, y_value
-
-
-def web_mercator_tile_size(zoom: int):
-    """Calcula o tamanho, em metros Web Mercator, de um tile para o zoom dado."""
-
-    return (WEB_MERCATOR_LIMIT * 2) / (2 ** zoom)
-
-
-def web_mercator_to_tile(x_value: float, y_value: float, zoom: int):
-    """Converte coordenadas Web Mercator para índice de tile OSM."""
-
-    tile_size = web_mercator_tile_size(zoom)
-    tile_x = math.floor((x_value + WEB_MERCATOR_LIMIT) / tile_size)
-    tile_y = math.floor((WEB_MERCATOR_LIMIT - y_value) / tile_size)
-    max_tile = (2 ** zoom) - 1
-    return (
-        max(0, min(max_tile, tile_x)),
-        max(0, min(max_tile, tile_y)),
-    )
-
-
-def tile_web_mercator_extent(tile_x: int, tile_y: int, zoom: int):
-    """Devolve a caixa Web Mercator ocupada por um tile OSM."""
-
-    tile_size = web_mercator_tile_size(zoom)
-    min_x = -WEB_MERCATOR_LIMIT + tile_x * tile_size
-    max_x = min_x + tile_size
-    max_y = WEB_MERCATOR_LIMIT - tile_y * tile_size
-    min_y = max_y - tile_size
-    return min_x, max_x, min_y, max_y
 
 
 def cached_osm_tile(tile_x: int, tile_y: int, zoom: int):
@@ -502,25 +177,6 @@ def image_world_corners(calibration: dict, image_shape):
         pixel_to_world(calibration, image_shape, width, 0),
         pixel_to_world(calibration, image_shape, width, height),
         pixel_to_world(calibration, image_shape, 0, height),
-    ]
-
-
-def world_file_corners(world_file: dict, image_shape):
-    """Calcula os quatro cantos da imagem usando um world file."""
-
-    height, width = image_shape[:2]
-
-    def transform(pixel_x, pixel_y):
-        return (
-            world_file["a"] * pixel_x + world_file["b"] * pixel_y + world_file["c"],
-            world_file["d"] * pixel_x + world_file["e"] * pixel_y + world_file["f"],
-        )
-
-    return [
-        transform(0, 0),
-        transform(width, 0),
-        transform(width, height),
-        transform(0, height),
     ]
 
 
@@ -927,7 +583,7 @@ class DesktopNavigationApp(tk.Tk):
             return
 
         # As comboboxes mostram texto legível; aqui voltamos ao ID interno
-        # usado pelo NetworkX para calcular caminhos.
+        # usado pelo core para calcular caminhos.
         origin = self._selected_node(
             self.origin_var.get(),
             self.origin_building_var.get(),

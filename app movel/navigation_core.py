@@ -34,6 +34,34 @@ OSM_TILE_USER_AGENT = "UTADIndoorNavigationPrototype/0.2 (academic project)"
 EXTERIOR_TILE_ZOOM = 18
 
 
+def configure_paths(base_dir: Path | str):
+    """
+    Atualiza os caminhos usados pelo core sem duplicar a lógica.
+
+    A app móvel usa por defeito a pasta `app movel`. A app desktop importa este
+    mesmo core através do wrapper da raiz e aponta-o para a pasta principal do
+    repositório, onde também existem `OSM Pisos` e `Imagens ECT2`.
+    """
+
+    global BASE_DIR, OSM_DIR, IMAGE_DIR, OSM_FILES, FLOOR_IMAGES
+
+    BASE_DIR = Path(base_dir).resolve()
+    OSM_DIR = BASE_DIR / "OSM Pisos"
+    IMAGE_DIR = BASE_DIR / "Imagens ECT2"
+    OSM_FILES = {
+        "Exterior": OSM_DIR / "Exterior.osm",
+        "Piso1": OSM_DIR / "Piso1.osm",
+        "Piso2": OSM_DIR / "Piso2.osm",
+        "Piso3": OSM_DIR / "Piso3.osm",
+    }
+    FLOOR_IMAGES = {
+        "Piso1": IMAGE_DIR / "Piso 1.jpg",
+        "Piso2": IMAGE_DIR / "Piso2.png",
+        "Piso3": IMAGE_DIR / "Piso 3.jpg",
+    }
+    return BASE_DIR
+
+
 @dataclass
 class RouteState:
     graph: object
@@ -91,12 +119,12 @@ class EdgeAccessor:
 
 class SimpleGraph:
     """
-    Grafo não dirigido mínimo para Android.
+    Grafo não dirigido mínimo usado pelo core comum.
 
-    A app desktop usa NetworkX, mas no APK o NetworkX trouxe uma dependência
-    nativa (`_bz2`) que não estava disponível. Esta classe implementa só as
-    operações necessárias: adicionar nós/arestas, iterar nós/arestas, consultar
-    vizinhos e aceder a `graph[a][b]`.
+    O protótipo começou por usar NetworkX no desktop, mas no APK essa biblioteca
+    trouxe uma dependência nativa (`_bz2`) indisponível. Esta classe implementa
+    só as operações necessárias: adicionar nós/arestas, iterar nós/arestas,
+    consultar vizinhos e aceder a `graph[a][b]`.
     """
 
     def __init__(self):
@@ -117,6 +145,12 @@ class SimpleGraph:
 
     def has_edge(self, node_a, node_b):
         return node_b in self._adj.get(node_a, {})
+
+    def number_of_nodes(self):
+        return len(self._nodes)
+
+    def number_of_edges(self):
+        return sum(len(neighbors) for neighbors in self._adj.values()) // 2
 
     def neighbors(self, node_id):
         return self._adj.get(node_id, {}).keys()
@@ -530,7 +564,7 @@ def read_world_file(image_path: Path):
 
 
 def world_file_corners(world_file: dict, image_size: tuple[int, int]):
-    width, height = image_size
+    height, width = image_size[:2]
 
     def transform(pixel_x, pixel_y):
         return (
