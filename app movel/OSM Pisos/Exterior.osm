@@ -1,11 +1,11 @@
-<?xml version='1.0' encoding='utf-8'?>
+<?xml version='1.0' encoding='UTF-8'?>
 <osm version="0.6" generator="JOSM">
   <node id="-27205" action="modify" visible="true" lat="41.28574494944" lon="-7.74368695982">
     <tag k="accessibility" v="1" />
     <tag k="building" v="ECT2" />
     <tag k="floor" v="0" />
     <tag k="nodeID" v="1" />
-    <tag k="roomname" v="entradaP0" />
+    <tag k="roomname" v="entrada Piso 0" />
     <tag k="transition" v="ECT2-ELEVADOR-PRINCIPAL;ECT2-ESCADAS-BAR-P1" />
     <tag k="type" v="outdoor" />
   </node>
@@ -14,15 +14,15 @@
     <tag k="building" v="ECT1" />
     <tag k="floor" v="1" />
     <tag k="nodeID" v="2" />
-    <tag k="roomname" v="entradaP1" />
+    <tag k="roomname" v="Entrada Piso 1" />
     <tag k="type" v="outdoor" />
   </node>
   <node id="-27244" action="modify" visible="true" lat="41.28716560095" lon="-7.74082738973">
-    <tag k="accessibility" v="3" />
+    <tag k="accessibility" v="1" />
     <tag k="building" v="ECT1" />
     <tag k="floor" v="0" />
     <tag k="nodeID" v="3" />
-    <tag k="roomname" v="entradaP0" />
+    <tag k="roomname" v="entrada Piso -1" />
     <tag k="type" v="outdoor" />
   </node>
   <node id="-27254" action="modify" visible="true" lat="41.28509621159" lon="-7.74452213332">
@@ -30,7 +30,7 @@
     <tag k="building" v="ECHS2" />
     <tag k="floor" v="0" />
     <tag k="nodeID" v="4" />
-    <tag k="roomname" v="entradaP1" />
+    <tag k="roomname" v="entrada Piso 1" />
     <tag k="type" v="outdoor" />
   </node>
   <node id="-27263" action="modify" visible="true" lat="41.28716232635" lon="-7.74088069931">
@@ -39,7 +39,7 @@
     <tag k="floor" v="0" />
     <tag k="nodeID" v="5" />
     <tag k="roomname" v="rampa ECT1" />
-    <tag k="type" v="rampa" />
+    <tag k="type" v="ramp" />
   </node>
   <node id="-27270" action="modify" visible="true" lat="41.2865259468" lon="-7.74081498519">
     <tag k="accessibility" v="1" />
@@ -121,7 +121,7 @@
     <tag k="roomname" v="Passadeira" />
     <tag k="type" v="crosswalk" />
   </node>
-  <node id="-27282" action="modify" visible="true" lat="41.28593843649" lon="-7.74306267634">
+  <node id="-27282" action="modify" visible="true" lat="41.28592533586" lon="-7.74304323032">
     <tag k="accessibility" v="1" />
     <tag k="building" v="Exterior" />
     <tag k="floor" v="exterior" />
@@ -129,15 +129,7 @@
     <tag k="roomname" v="Calçada" />
     <tag k="type" v="sidewalk" />
   </node>
-  <node id="-27283" action="modify" visible="true" lat="41.28597673063" lon="-7.74323299661">
-    <tag k="accessibility" v="1" />
-    <tag k="building" v="Exterior" />
-    <tag k="floor" v="exterior" />
-    <tag k="nodeID" v="17" />
-    <tag k="roomname" v="Calçada" />
-    <tag k="type" v="sidewalk" />
-  </node>
-  <node id="-27284" action="modify" visible="true" lat="41.2859671571" lon="-7.74323970214">
+  <node id="-27284" action="modify" visible="true" lat="41.2859721958" lon="-7.74324104324">
     <tag k="accessibility" v="1" />
     <tag k="building" v="Exterior" />
     <tag k="floor" v="exterior" />
@@ -210,7 +202,7 @@
     <tag k="type" v="sidewalk" />
   </node>
   <node id="-27293" action="modify" visible="true" lat="41.28588401846" lon="-7.74338722363">
-    <tag k="accessibility" v="1" />
+    <tag k="accessibility" v="2" />
     <tag k="building" v="Exterior" />
     <tag k="floor" v="exterior" />
     <tag k="nodeID" v="27" />
@@ -231,9 +223,9 @@
     <tag k="building" v="ECT2" />
     <tag k="floor" v="exterior" />
     <tag k="nodeID" v="29" />
-    <tag k="roomname" v="Entrada P1" />
+    <tag k="roomname" v="Escadas Entrada Piso 1" />
     <tag k="transition" v="ECT2-ENTRADA-P1" />
-    <tag k="type" v="sidewalk" />
+    <tag k="type" v="stairs" />
   </node>
   <node id="-27296" action="modify" visible="true" lat="41.28500929275" lon="-7.74455934897">
     <tag k="accessibility" v="1" />
@@ -283,7 +275,7 @@
     <tag k="roomname" v="Passadeira" />
     <tag k="type" v="crosswalk" />
   </node>
-  <node id="-27334" action="modify" visible="true" lat="41.2865919527" lon="-7.74082839556">
+  <node id="-27334" action="modify" visible="true" lat="41.28659951068" lon="-7.74083107777">
     <tag k="accessibility" v="1" />
     <tag k="building" v="Exterior" />
     <tag k="floor" v="exterior" />
@@ -291,26 +283,154 @@
     <tag k="roomname" v="Passadeira" />
     <tag k="type" v="crosswalk" />
   </node>
+  <node id="-27373" action="modify" visible="true" lat="41.28598479205" lon="-7.74328261681">
+    <tag k="accessibility" v="1" />
+    <tag k="building" v="Exterior" />
+    <tag k="floor" v="exterior" />
+    <tag k="nodeID" v="38" />
+    <tag k="roomname" v="Calçada" />
+    <tag k="type" v="sidewalk" />
+  </node>
+  <node id="-27374" action="modify" visible="true" lat="41.28603669065" lon="-7.74330072172">
+    <tag k="accessibility" v="1" />
+    <tag k="building" v="Exterior" />
+    <tag k="floor" v="exterior" />
+    <tag k="nodeID" v="39" />
+    <tag k="roomname" v="Calçada" />
+    <tag k="type" v="sidewalk" />
+  </node>
+  <node id="-27375" action="modify" visible="true" lat="41.28608959695" lon="-7.74352468617">
+    <tag k="accessibility" v="1" />
+    <tag k="building" v="Exterior" />
+    <tag k="floor" v="exterior" />
+    <tag k="nodeID" v="40" />
+    <tag k="roomname" v="Calçada" />
+    <tag k="type" v="sidewalk" />
+  </node>
+  <node id="-27376" action="modify" visible="true" lat="41.286050799" lon="-7.74361252852">
+    <tag k="accessibility" v="1" />
+    <tag k="building" v="Exterior" />
+    <tag k="floor" v="exterior" />
+    <tag k="nodeID" v="41" />
+    <tag k="roomname" v="Calçada" />
+    <tag k="type" v="sidewalk" />
+  </node>
+  <node id="-27377" action="modify" visible="true" lat="41.28603719452" lon="-7.74374865063">
+    <tag k="accessibility" v="1" />
+    <tag k="building" v="Exterior" />
+    <tag k="floor" v="exterior" />
+    <tag k="nodeID" v="42" />
+    <tag k="roomname" v="Calçada" />
+    <tag k="type" v="sidewalk" />
+  </node>
+  <node id="-27378" action="modify" visible="true" lat="41.28587998699" lon="-7.74386935003">
+    <tag k="accessibility" v="1" />
+    <tag k="building" v="Exterior" />
+    <tag k="floor" v="exterior" />
+    <tag k="nodeID" v="43" />
+    <tag k="roomname" v="Passadeira" />
+    <tag k="type" v="crosswalk" />
+  </node>
+  <node id="-27379" action="modify" visible="true" lat="41.28598176883" lon="-7.74382576413">
+    <tag k="accessibility" v="1" />
+    <tag k="building" v="Exterior" />
+    <tag k="floor" v="exterior" />
+    <tag k="nodeID" v="44" />
+    <tag k="roomname" v="Calçada" />
+    <tag k="type" v="sidewalk" />
+  </node>
+  <node id="-27380" action="modify" visible="true" lat="41.28586033602" lon="-7.743785531">
+    <tag k="accessibility" v="1" />
+    <tag k="building" v="Exterior" />
+    <tag k="floor" v="exterior" />
+    <tag k="nodeID" v="45" />
+    <tag k="roomname" v="Passadeira" />
+    <tag k="type" v="crosswalk" />
+  </node>
+  <node id="-27381" action="modify" visible="true" lat="41.28577367014" lon="-7.7438317991">
+    <tag k="accessibility" v="1" />
+    <tag k="building" v="Exterior" />
+    <tag k="floor" v="exterior" />
+    <tag k="nodeID" v="46" />
+    <tag k="roomname" v="Calçada" />
+    <tag k="type" v="sidewalk" />
+  </node>
+  <node id="-27442" action="modify" visible="true" lat="41.28518061092" lon="-7.74417713419">
+    <tag k="accessibility" v="1" />
+    <tag k="building" v="Exterior" />
+    <tag k="floor" v="exterior" />
+    <tag k="nodeID" v="47" />
+    <tag k="roomname" v="Calçada" />
+    <tag k="type" v="sidewalk" />
+  </node>
+  <node id="-27443" action="modify" visible="true" lat="41.28529347912" lon="-7.74412885442">
+    <tag k="accessibility" v="1" />
+    <tag k="building" v="Exterior" />
+    <tag k="floor" v="exterior" />
+    <tag k="nodeID" v="48" />
+    <tag k="roomname" v="Calçada" />
+    <tag k="type" v="sidewalk" />
+  </node>
+  <node id="-27654" action="modify" visible="true" lat="41.28663125419" lon="-7.74050787158">
+    <tag k="accessibility" v="1" />
+    <tag k="building" v="Exterior" />
+    <tag k="floor" v="exterior" />
+    <tag k="nodeID" v="49" />
+    <tag k="roomname" v="Calçada" />
+    <tag k="type" v="sidewalk" />
+  </node>
+  <node id="-27655" action="modify" visible="true" lat="41.28664183535" lon="-7.74028793044">
+    <tag k="accessibility" v="1" />
+    <tag k="building" v="Exterior" />
+    <tag k="floor" v="exterior" />
+    <tag k="nodeID" v="50" />
+    <tag k="roomname" v="Calçada" />
+    <tag k="type" v="sidewalk" />
+  </node>
+  <node id="-27656" action="modify" visible="true" lat="41.28666602087" lon="-7.74029329486">
+    <tag k="accessibility" v="1" />
+    <tag k="building" v="Exterior" />
+    <tag k="floor" v="exterior" />
+    <tag k="nodeID" v="51" />
+    <tag k="roomname" v="Calçada" />
+    <tag k="type" v="sidewalk" />
+  </node>
+  <node id="-27657" action="modify" visible="true" lat="41.28669121411" lon="-7.74050384827">
+    <tag k="accessibility" v="1" />
+    <tag k="building" v="Exterior" />
+    <tag k="floor" v="exterior" />
+    <tag k="nodeID" v="52" />
+    <tag k="roomname" v="Calçada" />
+    <tag k="type" v="sidewalk" />
+  </node>
+  <node id="-27658" action="modify" visible="true" lat="41.2866685402" lon="-7.74081431396">
+    <tag k="accessibility" v="1" />
+    <tag k="building" v="ECT1" />
+    <tag k="floor" v="1" />
+    <tag k="nodeID" v="37" />
+    <tag k="roomname" v="Entrada Piso 0" />
+    <tag k="type" v="outdoor" />
+  </node>
   <way id="-1958" action="modify" visible="true">
     <nd ref="-27244" />
     <nd ref="-27263" />
     <tag k="accessibility" v="3" />
     <tag k="bidirectional" v="true" />
-    <tag k="edge_type" v="connection" />
+    <tag k="edge_type" v="ramp" />
   </way>
   <way id="-1961" action="modify" visible="true">
     <nd ref="-27285" />
     <nd ref="-27263" />
     <tag k="accessibility" v="3" />
     <tag k="bidirectional" v="true" />
-    <tag k="edge_type" v="connection" />
+    <tag k="edge_type" v="ramp" />
   </way>
   <way id="-1962" action="modify" visible="true">
     <nd ref="-27288" />
     <nd ref="-27285" />
     <tag k="accessibility" v="1" />
     <tag k="bidirectional" v="true" />
-    <tag k="edge_type" v="connection" />
+    <tag k="edge_type" v="crosswalk" />
   </way>
   <way id="-1969" action="modify" visible="true">
     <nd ref="-27279" />
@@ -318,7 +438,7 @@
     <nd ref="-27291" />
     <tag k="accessibility" v="1" />
     <tag k="bidirectional" v="true" />
-    <tag k="edge_type" v="connection" />
+    <tag k="edge_type" v="crosswalk" />
   </way>
   <way id="-1970" action="modify" visible="true">
     <nd ref="-27276" />
@@ -326,154 +446,133 @@
     <nd ref="-27279" />
     <tag k="accessibility" v="1" />
     <tag k="bidirectional" v="true" />
-    <tag k="edge_type" v="connection" />
+    <tag k="edge_type" v="crosswalk" />
   </way>
   <way id="-2012" action="modify" visible="true">
     <nd ref="-27286" />
     <nd ref="-27288" />
     <tag k="accessibility" v="1" />
     <tag k="bidirectional" v="true" />
-    <tag k="edge_type" v="connection" />
+    <tag k="edge_type" v="crosswalk" />
   </way>
   <way id="-2013" action="modify" visible="true">
     <nd ref="-27287" />
     <nd ref="-27286" />
     <tag k="accessibility" v="1" />
     <tag k="bidirectional" v="true" />
-    <tag k="edge_type" v="connection" />
+    <tag k="edge_type" v="crosswalk" />
   </way>
   <way id="-2020" action="modify" visible="true">
     <nd ref="-27289" />
     <nd ref="-27287" />
     <tag k="accessibility" v="1" />
     <tag k="bidirectional" v="true" />
-    <tag k="edge_type" v="connection" />
+    <tag k="edge_type" v="sidewalk" />
   </way>
   <way id="-2021" action="modify" visible="true">
     <nd ref="-27290" />
     <nd ref="-27289" />
     <tag k="accessibility" v="1" />
     <tag k="bidirectional" v="true" />
-    <tag k="edge_type" v="connection" />
+    <tag k="edge_type" v="sidewalk" />
   </way>
   <way id="-2022" action="modify" visible="true">
     <nd ref="-27291" />
     <nd ref="-27290" />
     <tag k="accessibility" v="1" />
     <tag k="bidirectional" v="true" />
-    <tag k="edge_type" v="connection" />
+    <tag k="edge_type" v="sidewalk" />
   </way>
   <way id="-2024" action="modify" visible="true">
     <nd ref="-27275" />
     <nd ref="-27276" />
     <tag k="accessibility" v="1" />
     <tag k="bidirectional" v="true" />
-    <tag k="edge_type" v="connection" />
+    <tag k="edge_type" v="sidewalk" />
   </way>
   <way id="-2025" action="modify" visible="true">
     <nd ref="-27274" />
     <nd ref="-27275" />
     <tag k="accessibility" v="1" />
     <tag k="bidirectional" v="true" />
-    <tag k="edge_type" v="connection" />
+    <tag k="edge_type" v="sidewalk" />
   </way>
   <way id="-2026" action="modify" visible="true">
     <nd ref="-27273" />
     <nd ref="-27274" />
     <tag k="accessibility" v="1" />
     <tag k="bidirectional" v="true" />
-    <tag k="edge_type" v="connection" />
+    <tag k="edge_type" v="sidewalk" />
   </way>
   <way id="-2027" action="modify" visible="true">
     <nd ref="-27272" />
     <nd ref="-27273" />
     <tag k="accessibility" v="1" />
     <tag k="bidirectional" v="true" />
-    <tag k="edge_type" v="connection" />
+    <tag k="edge_type" v="sidewalk" />
   </way>
   <way id="-2041" action="modify" visible="true">
     <nd ref="-27271" />
     <nd ref="-27272" />
     <tag k="accessibility" v="1" />
     <tag k="bidirectional" v="true" />
-    <tag k="edge_type" v="connection" />
+    <tag k="edge_type" v="street" />
   </way>
   <way id="-2042" action="modify" visible="true">
     <nd ref="-27270" />
     <nd ref="-27271" />
     <tag k="accessibility" v="1" />
     <tag k="bidirectional" v="true" />
-    <tag k="edge_type" v="connection" />
+    <tag k="edge_type" v="crosswalk" />
   </way>
   <way id="-2043" action="modify" visible="true">
     <nd ref="-27334" />
     <nd ref="-27270" />
     <tag k="accessibility" v="1" />
     <tag k="bidirectional" v="true" />
-    <tag k="edge_type" v="connection" />
+    <tag k="edge_type" v="crosswalk" />
   </way>
   <way id="-2044" action="modify" visible="true">
     <nd ref="-27233" />
     <nd ref="-27334" />
     <tag k="accessibility" v="2" />
     <tag k="bidirectional" v="true" />
-    <tag k="edge_type" v="connection" />
-  </way>
-  <way id="-2045" action="modify" visible="true">
-    <nd ref="-27281" />
-    <nd ref="-27282" />
-    <tag k="accessibility" v="1" />
-    <tag k="bidirectional" v="true" />
-    <tag k="edge_type" v="connection" />
-  </way>
-  <way id="-2046" action="modify" visible="true">
-    <nd ref="-27283" />
-    <nd ref="-27282" />
-    <tag k="accessibility" v="1" />
-    <tag k="bidirectional" v="true" />
-    <tag k="edge_type" v="connection" />
-  </way>
-  <way id="-2047" action="modify" visible="true">
-    <nd ref="-27284" />
-    <nd ref="-27283" />
-    <tag k="accessibility" v="1" />
-    <tag k="bidirectional" v="true" />
-    <tag k="edge_type" v="connection" />
+    <tag k="edge_type" v="crosswalk" />
   </way>
   <way id="-2048" action="modify" visible="true">
     <nd ref="-27311" />
     <nd ref="-27284" />
     <tag k="accessibility" v="1" />
     <tag k="bidirectional" v="true" />
-    <tag k="edge_type" v="connection" />
+    <tag k="edge_type" v="crosswalk" />
   </way>
   <way id="-2049" action="modify" visible="true">
     <nd ref="-27292" />
     <nd ref="-27311" />
     <tag k="accessibility" v="1" />
     <tag k="bidirectional" v="true" />
-    <tag k="edge_type" v="connection" />
+    <tag k="edge_type" v="crosswalk" />
   </way>
   <way id="-2050" action="modify" visible="true">
     <nd ref="-27293" />
     <nd ref="-27292" />
-    <tag k="accessibility" v="1" />
+    <tag k="accessibility" v="2" />
     <tag k="bidirectional" v="true" />
-    <tag k="edge_type" v="connection" />
+    <tag k="edge_type" v="stairs" />
   </way>
   <way id="-2078" action="modify" visible="true">
     <nd ref="-27294" />
     <nd ref="-27293" />
     <tag k="accessibility" v="2" />
     <tag k="bidirectional" v="true" />
-    <tag k="edge_type" v="connection" />
+    <tag k="edge_type" v="stairs" />
   </way>
   <way id="-2079" action="modify" visible="true">
     <nd ref="-27293" />
     <nd ref="-27295" />
     <tag k="accessibility" v="2" />
     <tag k="bidirectional" v="true" />
-    <tag k="edge_type" v="connection" />
+    <tag k="edge_type" v="stairs" />
   </way>
   <way id="-2098" action="modify" visible="true">
     <nd ref="-27303" />
@@ -484,13 +583,154 @@
     <nd ref="-27254" />
     <tag k="accessibility" v="1" />
     <tag k="bidirectional" v="true" />
-    <tag k="edge_type" v="connection" />
+    <tag k="edge_type" v="crosswalk" />
   </way>
   <way id="-2099" action="modify" visible="true">
     <nd ref="-27205" />
     <nd ref="-27303" />
     <tag k="accessibility" v="1" />
     <tag k="bidirectional" v="true" />
-    <tag k="edge_type" v="connection" />
+    <tag k="edge_type" v="sidewalk" />
+  </way>
+  <way id="-2135" action="modify" visible="true">
+    <nd ref="-27281" />
+    <nd ref="-27282" />
+    <nd ref="-27284" />
+    <tag k="accessibility" v="1" />
+    <tag k="bidirectional" v="true" />
+    <tag k="edge_type" v="sidewalk" />
+  </way>
+  <way id="-2137" action="modify" visible="true">
+    <nd ref="-27303" />
+    <nd ref="-27381" />
+    <tag k="accessibility" v="1" />
+    <tag k="bidirectional" v="true" />
+    <tag k="edge_type" v="sidewalk" />
+  </way>
+  <way id="-2138" action="modify" visible="true">
+    <nd ref="-27380" />
+    <nd ref="-27381" />
+    <tag k="accessibility" v="1" />
+    <tag k="bidirectional" v="true" />
+    <tag k="edge_type" v="sidewalk" />
+  </way>
+  <way id="-2140" action="modify" visible="true">
+    <nd ref="-27378" />
+    <nd ref="-27380" />
+    <tag k="accessibility" v="1" />
+    <tag k="bidirectional" v="true" />
+    <tag k="edge_type" v="crosswalk" />
+  </way>
+  <way id="-2141" action="modify" visible="true">
+    <nd ref="-27379" />
+    <nd ref="-27378" />
+    <tag k="accessibility" v="1" />
+    <tag k="bidirectional" v="true" />
+    <tag k="edge_type" v="sidewalk" />
+  </way>
+  <way id="-2142" action="modify" visible="true">
+    <nd ref="-27377" />
+    <nd ref="-27379" />
+    <tag k="accessibility" v="1" />
+    <tag k="bidirectional" v="true" />
+    <tag k="edge_type" v="sidewalk" />
+  </way>
+  <way id="-2143" action="modify" visible="true">
+    <nd ref="-27376" />
+    <nd ref="-27377" />
+    <tag k="accessibility" v="1" />
+    <tag k="bidirectional" v="true" />
+    <tag k="edge_type" v="sidewalk" />
+  </way>
+  <way id="-2144" action="modify" visible="true">
+    <nd ref="-27375" />
+    <nd ref="-27376" />
+    <tag k="accessibility" v="1" />
+    <tag k="bidirectional" v="true" />
+    <tag k="edge_type" v="sidewalk" />
+  </way>
+  <way id="-2145" action="modify" visible="true">
+    <nd ref="-27374" />
+    <nd ref="-27375" />
+    <tag k="accessibility" v="1" />
+    <tag k="bidirectional" v="true" />
+    <tag k="edge_type" v="sidewalk" />
+  </way>
+  <way id="-2192" action="modify" visible="true">
+    <nd ref="-27373" />
+    <nd ref="-27374" />
+    <tag k="accessibility" v="1" />
+    <tag k="bidirectional" v="true" />
+    <tag k="edge_type" v="sidewalk" />
+  </way>
+  <way id="-2193" action="modify" visible="true">
+    <nd ref="-27284" />
+    <nd ref="-27373" />
+    <tag k="accessibility" v="1" />
+    <tag k="bidirectional" v="true" />
+    <tag k="edge_type" v="sidewalk" />
+  </way>
+  <way id="-2208" action="modify" visible="true">
+    <nd ref="-27305" />
+    <nd ref="-27442" />
+    <tag k="accessibility" v="1" />
+    <tag k="bidirectional" v="true" />
+    <tag k="edge_type" v="sidewalk" />
+  </way>
+  <way id="-2209" action="modify" visible="true">
+    <nd ref="-27443" />
+    <nd ref="-27442" />
+    <tag k="accessibility" v="1" />
+    <tag k="bidirectional" v="true" />
+    <tag k="edge_type" v="street" />
+  </way>
+  <way id="-2210" action="modify" visible="true">
+    <nd ref="-27378" />
+    <nd ref="-27443" />
+    <tag k="accessibility" v="1" />
+    <tag k="bidirectional" v="true" />
+    <tag k="edge_type" v="sidewalk" />
+  </way>
+  <way id="-2419" action="modify" visible="true">
+    <nd ref="-27334" />
+    <nd ref="-27654" />
+    <tag k="accessibility" v="1" />
+    <tag k="bidirectional" v="true" />
+    <tag k="edge_type" v="sidewalk" />
+  </way>
+  <way id="-2420" action="modify" visible="true">
+    <nd ref="-27655" />
+    <nd ref="-27654" />
+    <tag k="accessibility" v="1" />
+    <tag k="bidirectional" v="true" />
+    <tag k="edge_type" v="sidewalk" />
+  </way>
+  <way id="-2422" action="modify" visible="true">
+    <nd ref="-27656" />
+    <nd ref="-27655" />
+    <tag k="accessibility" v="1" />
+    <tag k="bidirectional" v="true" />
+    <tag k="edge_type" v="sidewalk" />
+  </way>
+  <way id="-2423" action="modify" visible="true">
+    <nd ref="-27657" />
+    <nd ref="-27656" />
+    <tag k="accessibility" v="1" />
+    <tag k="bidirectional" v="true" />
+    <tag k="edge_type" v="sidewalk" />
+  </way>
+  <way id="-2425" action="modify" visible="true">
+    <nd ref="-27654" />
+    <nd ref="-27657" />
+    <tag k="accessibility" v="2" />
+    <tag k="bidirectional" v="true" />
+    <tag k="edge_type" v="stairs" />
+  </way>
+  <way id="-2426" action="modify" visible="true">
+    <nd ref="-27658" />
+    <nd ref="-27657" />
+    <tag k="accessibility" v="1" />
+    <tag k="bidirectional" v="true" />
+    <tag k="edge_type" v="sidewalk" />
   </way>
 </osm>

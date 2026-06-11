@@ -1,11 +1,11 @@
-<?xml version='1.0' encoding='utf-8'?>
+<?xml version='1.0' encoding='UTF-8'?>
 <osm version="0.6" generator="JOSM">
-  <node id="-27159" action="modify" visible="true" lat="41.28590946394" lon="-7.74354463577">
+  <node id="-27159" action="modify" visible="true" lat="41.28592357232" lon="-7.74354128301">
     <tag k="accessibility" v="2" />
     <tag k="building" v="ECT2" />
     <tag k="floor" v="1" />
     <tag k="nodeID" v="1" />
-    <tag k="roomname" v="entradaP1" />
+    <tag k="roomname" v="entrada Piso 1" />
     <tag k="transition" v="ECT2-ENTRADA-P1" />
     <tag k="type" v="outdoor" />
   </node>
@@ -79,8 +79,9 @@
     <tag k="floor" v="1" />
     <tag k="nodeID" v="26" />
     <tag k="roomname" v="elevadorP1" />
+    <tag k="transition" v="ECT2-ELEVADOR-PRINCIPAL" />
     <tag k="type" v="elevator" />
-  <tag k="transition" v="ECT2-ELEVADOR-PRINCIPAL" /></node>
+  </node>
   <node id="-27169" action="modify" visible="true" lat="41.28585832054" lon="-7.74369366534">
     <tag k="accessibility" v="1" />
     <tag k="building" v="ECT2" />
@@ -435,13 +436,6 @@
     <tag k="bidirectional" v="true" />
     <tag k="edge_type" v="connection" />
   </way>
-  <way id="-1916" action="modify" visible="true">
-    <nd ref="-27159" />
-    <nd ref="-27160" />
-    <tag k="accessibility" v="2" />
-    <tag k="bidirectional" v="true" />
-    <tag k="edge_type" v="connection" />
-  </way>
   <way id="-1917" action="modify" visible="true">
     <nd ref="-27170" />
     <nd ref="-27169" />
@@ -517,7 +511,7 @@
     <nd ref="-27194" />
     <tag k="accessibility" v="2" />
     <tag k="bidirectional" v="true" />
-    <tag k="edge_type" v="connection" />
+    <tag k="edge_type" v="stairs" />
   </way>
   <way id="-1928" action="modify" visible="true">
     <nd ref="-27169" />
@@ -533,14 +527,14 @@
     <nd ref="-27194" />
     <tag k="accessibility" v="2" />
     <tag k="bidirectional" v="true" />
-    <tag k="edge_type" v="connection" />
+    <tag k="edge_type" v="stairs" />
   </way>
   <way id="-1930" action="modify" visible="true">
     <nd ref="-27196" />
     <nd ref="-27168" />
     <tag k="accessibility" v="3" />
     <tag k="bidirectional" v="true" />
-    <tag k="edge_type" v="connection" />
+    <tag k="edge_type" v="elevator" />
   </way>
   <way id="-1931" action="modify" visible="true">
     <nd ref="-27170" />
@@ -595,6 +589,13 @@
     <nd ref="-27187" />
     <nd ref="-27198" />
     <tag k="accessibility" v="1" />
+    <tag k="bidirectional" v="true" />
+    <tag k="edge_type" v="connection" />
+  </way>
+  <way id="-2594" action="modify" visible="true">
+    <nd ref="-27159" />
+    <nd ref="-27160" />
+    <tag k="accessibility" v="2" />
     <tag k="bidirectional" v="true" />
     <tag k="edge_type" v="connection" />
   </way>

@@ -33,6 +33,20 @@ OSM_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
 OSM_TILE_USER_AGENT = "UTADIndoorNavigationPrototype/0.2 (academic project)"
 EXTERIOR_TILE_ZOOM = 18
 
+# Multiplicadores usados apenas pelo Dijkstra para preferir caminhos mais
+# confortaveis quando existe uma alternativa semelhante. A distancia real fica
+# guardada em `length` e continua a ser a que aparece nas instrucoes.
+EDGE_TYPE_COST_MULTIPLIER = {
+    "connection": 1.0,
+    "sidewalk": 1.0,
+    "corridor": 1.0,
+    "crosswalk": 1.05,
+    "ramp": 1.15,
+    "street": 1.4,
+    "stairs": 1.3,
+    "elevator": 1.0,
+}
+
 
 def configure_paths(base_dir: Path | str):
     """
@@ -78,6 +92,7 @@ class SelectableNode:
     building: str
     floor: str
     node_type: str
+    accessibility: str
     label: str
 
 
@@ -225,13 +240,59 @@ def haversine(lat1, lon1, lat2, lon2):
     return radius * 2 * math.atan2(math.sqrt(value), math.sqrt(1 - value))
 
 
+def segment_edge_type(way_edge_type: str, node_a: dict, node_b: dict) -> str:
+    """
+    Ajusta o tipo da way ao segmento concreto que está a ser criado.
+
+    Uma way OSM pode ter vários nós. A tag `edge_type` da própria way é a fonte
+    de verdade para escadas, porque uma escada pode ligar dois patamares que não
+    têm `type=stairs`. Para passadeiras e calçadas, o tipo dos extremos ainda
+    ajuda a distinguir aproximação, travessia e saída.
+    """
+
+    edge_type = (way_edge_type or "connection").strip() or "connection"
+    endpoint_types = {str(node_a.get("type", "")).lower(), str(node_b.get("type", "")).lower()}
+
+    if edge_type == "stairs":
+        return "stairs"
+    if edge_type == "elevator" and "elevator" not in endpoint_types:
+        return "connection"
+    if edge_type == "ramp" and endpoint_types.isdisjoint({"ramp", "rampa"}):
+        return "connection"
+    if edge_type == "crosswalk":
+        if "sidewalk" in endpoint_types:
+            return "sidewalk"
+        if "crosswalk" not in endpoint_types:
+            return "connection"
+    if edge_type == "sidewalk" and "sidewalk" not in endpoint_types:
+        return "connection"
+    return edge_type
+
+
+def edge_cost(length: float, edge_type: str) -> float:
+    """Converte metros reais no custo interno usado pelo Dijkstra."""
+
+    multiplier = EDGE_TYPE_COST_MULTIPLIER.get(str(edge_type).lower(), 1.0)
+    return length * multiplier
+
+
+def path_real_distance(graph, path: list[str]) -> float:
+    """Soma os metros reais de uma rota a partir do campo `length`."""
+
+    total = 0.0
+    for index in range(len(path) - 1):
+        edge = graph[path[index]][path[index + 1]]
+        total += edge.get("length", edge.get("weight", 0))
+    return total
+
+
 def build_graph(nodes, edges):
     """
     Constrói o grafo de um ficheiro OSM.
 
     Cada nó OSM vira um nó do grafo. Cada ligação entre dois nós consecutivos
-    de um way vira uma aresta com `weight` igual à distância em metros. Esse
-    `weight` é o valor que o Dijkstra soma para escolher a rota mais curta.
+    de um way vira uma aresta com `length` em metros reais e `weight` como custo
+    interno. O Dijkstra soma `weight`, mas a app mostra `length` ao utilizador.
     """
 
     graph = SimpleGraph()
@@ -257,15 +318,21 @@ def build_graph(nodes, edges):
             nodes[node_b]["lat"],
             nodes[node_b]["lon"],
         )
+        edge_type = segment_edge_type(
+            way_tags.get("edge_type", "connection"),
+            nodes[node_a]["tags"],
+            nodes[node_b]["tags"],
+        )
+
         graph.add_edge(
             node_a,
             node_b,
-            # `weight` é o custo usado pelo algoritmo de caminho mais curto.
-            weight=distance,
-            # `length` é o mesmo valor arredondado para as instruções visuais.
+            # `weight` e o custo usado pelo algoritmo de caminho mais curto.
+            weight=edge_cost(distance, edge_type),
+            # `length` guarda a distancia real para as instrucoes visuais.
             length=round(distance, 2),
             way_id=way_id,
-            edge_type=way_tags.get("edge_type", "connection"),
+            edge_type=edge_type,
             accessibility=read_int_tag(
                 way_tags,
                 keys=("accessibility",),
@@ -430,7 +497,7 @@ def add_transition_edge(campus_graph, node_a, data_a, node_b, data_b, edge_type)
     campus_graph.add_edge(
         node_a,
         node_b,
-        weight=distance,
+        weight=edge_cost(distance, edge_type),
         length=round(distance, 2),
         way_id=f"transition:{node_a}->{node_b}",
         edge_type=edge_type,
@@ -445,12 +512,15 @@ def calculate_path(graph, origin, destination, mobility_reduced=False):
     Calcula a rota entre origem e destino com Dijkstra.
 
     O algoritmo procura o caminho cuja soma dos `weight` das arestas é menor.
-    Esses pesos vêm das distâncias Haversine nos corredores/caminhos, das
-    distâncias Web Mercator nas transições, e dos custos artificiais nas
-    escadas/elevador.
+    Esses pesos podem ter penalizações por `edge_type`; no fim devolvemos a
+    soma de `length`, para a interface continuar a apresentar metros reais.
     """
 
     if origin not in graph.nodes or destination not in graph.nodes:
+        return None, float("inf")
+    if not graph_node_allowed_for_profile(graph, origin, mobility_reduced):
+        return None, float("inf")
+    if not graph_node_allowed_for_profile(graph, destination, mobility_reduced):
         return None, float("inf")
 
     distances = {node_id: float("inf") for node_id in graph.nodes}
@@ -495,7 +565,7 @@ def calculate_path(graph, origin, destination, mobility_reduced=False):
         node = previous[node]
     path.reverse()
 
-    return path, round(distances[destination], 2)
+    return path, round(path_real_distance(graph, path), 2)
 
 
 def lonlat_to_web_mercator(lat: float, lon: float):
@@ -617,11 +687,47 @@ def collect_selectable_nodes(graph) -> list[SelectableNode]:
                 building=building,
                 floor=floor,
                 node_type=node_type,
+                accessibility=str(data.get("accessibility", "1")).strip() or "1",
                 label=f"{prefix}{name}",
             )
         )
 
     return sorted(nodes, key=selectable_sort_key)
+
+
+def node_data_allowed_for_profile(node_data: dict, mobility_reduced: bool):
+    """Indica se os dados de um no sao compativeis com o perfil escolhido."""
+
+    accessibility = str(node_data.get("accessibility", "1")).strip()
+    node_type = str(node_data.get("type", "")).lower()
+    if mobility_reduced:
+        return accessibility != "2" and node_type != "stairs"
+    return accessibility != "3" and node_type != "elevator"
+
+
+def graph_node_allowed_for_profile(graph, node_id: str, mobility_reduced: bool):
+    """Protege o calculo contra origens/destinos invalidos para o perfil."""
+
+    if node_id not in graph.nodes:
+        return False
+    return node_data_allowed_for_profile(graph.nodes[node_id], mobility_reduced)
+
+
+def selectable_node_allowed_for_profile(node: SelectableNode, mobility_reduced: bool):
+    """Indica se um ponto deve aparecer para o perfil escolhido."""
+
+    return node_data_allowed_for_profile(
+        {"accessibility": node.accessibility, "type": node.node_type},
+        mobility_reduced,
+    )
+
+
+def filter_selectable_nodes_for_profile(nodes: list[SelectableNode], mobility_reduced: bool):
+    return [
+        node
+        for node in nodes
+        if selectable_node_allowed_for_profile(node, mobility_reduced)
+    ]
 
 
 def selectable_sort_key(item: SelectableNode):
@@ -720,6 +826,124 @@ def edge_name(edge):
     return "a ligação vertical"
 
 
+def floor_display_name(floor: str):
+    """Formata `Piso3` como texto natural para as instrucoes."""
+
+    if not floor:
+        return "piso indicado"
+    if floor == "Exterior":
+        return "Exterior"
+    number = floor_number(floor)
+    if number is not None:
+        return f"Piso {number}"
+    return str(floor)
+
+
+def vertical_direction(from_floor: str, to_floor: str):
+    """Devolve sobe/desce quando os dois pisos têm numeração conhecida."""
+
+    from_number = floor_number(from_floor)
+    to_number = floor_number(to_floor)
+    if from_number is None or to_number is None:
+        return None
+    if to_number > from_number:
+        return "sobe"
+    if to_number < from_number:
+        return "desce"
+    return None
+
+
+def vertical_action(edge_type: str, from_floor: str, to_floor: str):
+    """Gera uma ação clara para escadas/elevador entre pisos interiores."""
+
+    target_floor = floor_display_name(to_floor)
+    direction = vertical_direction(from_floor, to_floor)
+
+    if edge_type == "elevator":
+        if direction:
+            return f"{direction} pelo elevador até ao {target_floor}"
+        return f"usa o elevador até ao {target_floor}"
+
+    if edge_type == "stairs":
+        if direction:
+            return f"{direction} as escadas até ao {target_floor}"
+        return f"usa as escadas até ao {target_floor}"
+
+    return f"usa {edge_name({'edge_type': edge_type})} até ao {target_floor}"
+
+
+def upcoming_destination_hint(graph, path: list[str], index: int):
+    """Identifica se o próximo passo já deve anunciar um elemento físico."""
+
+    next_node = path[index + 1]
+    next_node_type = str(graph.nodes[next_node].get("type", "")).lower()
+    next_edge_type = ""
+    if index + 2 < len(path):
+        next_edge_type = str(graph[path[index + 1]][path[index + 2]].get("edge_type", "")).lower()
+
+    if "crosswalk" in {next_node_type, next_edge_type}:
+        return "até à passadeira"
+    if next_node_type in {"ramp", "rampa"} or next_edge_type == "ramp":
+        return "até à rampa"
+    if "stairs" in {next_node_type, next_edge_type}:
+        return "até às escadas"
+    if "elevator" in {next_node_type, next_edge_type}:
+        return "até ao elevador"
+    return None
+
+
+def movement_phrase(graph, path: list[str], index: int):
+    """
+    Traduz o tipo da aresta para uma ação compreensível pelo utilizador.
+
+    A distância continua a aparecer, mas agora o texto aproveita `edge_type`
+    para distinguir passadeiras, calçadas, rampas, escadas e elevadores.
+    """
+
+    edge = graph[path[index]][path[index + 1]]
+    edge_type = str(edge.get("edge_type", "connection")).lower()
+    current_type = str(graph.nodes[path[index]].get("type", "")).lower()
+    next_type = str(graph.nodes[path[index + 1]].get("type", "")).lower()
+    current_floor = str(graph.nodes[path[index]].get("floor_key", ""))
+    next_floor = str(graph.nodes[path[index + 1]].get("floor_key", ""))
+    hint = upcoming_destination_hint(graph, path, index)
+
+    if current_floor == "Exterior" and next_floor != "Exterior":
+        return "entra no edifício"
+    if current_floor != "Exterior" and next_floor == "Exterior":
+        return "sai do edifício"
+
+    if edge_type == "crosswalk":
+        if current_type != "crosswalk":
+            return "segue até à passadeira"
+        if next_type != "crosswalk":
+            return "segue até à saída da passadeira"
+        return "atravessa a passadeira"
+    if edge_type == "sidewalk":
+        return f"segue pela calçada {hint}" if hint else "segue pela calçada"
+    if edge_type == "street":
+        return "atravessa a estrada"
+    if edge_type == "ramp":
+        if current_type not in {"ramp", "rampa"}:
+            return "segue até à rampa"
+        return "segue pela rampa"
+    if edge_type == "stairs":
+        return "segue até às escadas"
+    if edge_type == "elevator":
+        return "segue até ao elevador"
+    if hint:
+        return f"segue {hint}"
+    return "avança"
+
+
+def movement_with_distance(phrase: str, distance: float):
+    """Acrescenta distância sem tornar as frases naturais demasiado pesadas."""
+
+    if phrase == "avança":
+        return f"avança {distance:.1f} m"
+    return f"{phrase} ({distance:.1f} m)"
+
+
 def turn_instruction(graph, path: list[str], index: int):
     """
     Calcula a orientação relativa no ponto atual da rota.
@@ -814,13 +1038,35 @@ def navigation_instruction(graph, route: RouteState):
     current_text = navigation_point_name(graph, current)
 
     if edge.get("vertical"):
-        if edge.get("edge_type") == "elevator":
-            exit_node = path[elevator_exit_index(graph, route, index)]
+        current_floor = str(graph.nodes[current].get("floor_key", ""))
+        next_floor = str(graph.nodes[next_node].get("floor_key", ""))
+        edge_type = edge.get("edge_type")
+        if current_floor == "Exterior" and next_floor != "Exterior":
+            exit_node = path[elevator_exit_index(graph, route, index)] if edge_type == "elevator" else next_node
+            exit_floor = str(graph.nodes[exit_node].get("floor_key", next_floor))
             next_text = navigation_point_name(graph, exit_node)
-            action = "usa o elevador"
+            if edge_type == "stairs":
+                action = f"entra no edifício pelas escadas até ao {floor_display_name(next_floor)}"
+            elif edge_type == "elevator":
+                action = f"entra no edifício pelo elevador até ao {floor_display_name(exit_floor)}"
+            else:
+                action = "entra no edifício"
+        elif current_floor != "Exterior" and next_floor == "Exterior":
+            next_text = navigation_point_name(graph, next_node)
+            if edge_type == "stairs":
+                action = "sai do edifício pelas escadas"
+            elif edge_type == "elevator":
+                action = "sai do edifício pelo elevador"
+            else:
+                action = "sai do edifício"
+        elif edge_type == "elevator":
+            exit_node = path[elevator_exit_index(graph, route, index)]
+            exit_floor = str(graph.nodes[exit_node].get("floor_key", next_floor))
+            next_text = navigation_point_name(graph, exit_node)
+            action = vertical_action(edge_type, current_floor, exit_floor)
         else:
             next_text = navigation_point_name(graph, next_node)
-            action = f"usa {edge_name(edge)}"
+            action = vertical_action(edge_type, current_floor, next_floor)
         return (
             f"{progress}\n\n"
             f"Local atual: {current_text}\n"
@@ -832,7 +1078,9 @@ def navigation_instruction(graph, route: RouteState):
     next_text = navigation_point_name(graph, next_node)
     distance = edge.get("length", edge.get("weight", 0))
     turn_text = turn_instruction(graph, path, index)
-    movement = f"{turn_text} e avança {distance:.1f} m" if turn_text else f"avança {distance:.1f} m"
+    movement = movement_with_distance(movement_phrase(graph, path, index), distance)
+    if turn_text:
+        movement = f"{turn_text} e {movement}"
     return (
         f"{progress}\n\n"
         f"Local atual: {current_text}\n"

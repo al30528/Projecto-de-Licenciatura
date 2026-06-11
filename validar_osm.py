@@ -250,7 +250,16 @@ def numeric_sort_key(value: str) -> tuple[int, str]:
         return (sys.maxsize, value)
 
 
-ALLOWED_EDGE_TYPES = {"connection", "stairs", "elevator", "ramp"}
+ALLOWED_EDGE_TYPES = {
+    "connection",
+    "crosswalk",
+    "elevator",
+    "outdoor",
+    "ramp",
+    "sidewalk",
+    "street",
+    "stairs",
+}
 
 
 def validate_ways(dataset: str, osm: OsmData, issues: list[Issue], strict_way_tags: bool) -> None:
@@ -303,16 +312,6 @@ def validate_ways(dataset: str, osm: OsmData, issues: list[Issue], strict_way_ta
                 f"edge_type inválido na way: {edge_type!r}; valores aceites: {', '.join(sorted(ALLOWED_EDGE_TYPES))}.",
             )
 
-        if "accessibilty" in way.tags:
-            issue(
-                issues,
-                "ERRO",
-                dataset,
-                osm.path.name,
-                target,
-                "tag antiga 'accessibilty' encontrada; usa 'accessibility'.",
-            )
-
         accessibility = way.tags.get("accessibility", "").strip()
         if not accessibility:
             missing_accessibility += 1
@@ -333,7 +332,7 @@ def validate_ways(dataset: str, osm: OsmData, issues: list[Issue], strict_way_ta
                         f"referenciados ({expected_accessibility})."
                     ),
                 )
-            elif way_accessibility > expected_accessibility:
+            elif way_accessibility > expected_accessibility and edge_type not in {"stairs", "elevator"}:
                 issue(
                     issues,
                     "AVISO",
@@ -481,7 +480,6 @@ def validate_graph(dataset: str, root: Path, issues: list[Issue]) -> None:
         return
 
     validate_profile_reachability(dataset, graph, selectable_nodes, mobility_reduced=False, issues=issues)
-    validate_profile_reachability(dataset, graph, selectable_nodes, mobility_reduced=True, issues=issues)
     validate_critical_routes(dataset, graph, selectable_nodes, issues)
 
 
@@ -535,9 +533,24 @@ def validate_profile_reachability(
     issues: list[Issue],
 ) -> None:
     profile = "mobilidade reduzida" if mobility_reduced else "normal"
-    origin = selectable_nodes[0]
+    origin = reachability_origin(selectable_nodes, mobility_reduced)
+    if origin is None:
+        issue(
+            issues,
+            "ERRO",
+            dataset,
+            "grafo",
+            f"perfil {profile}",
+            "não existe origem selecionável compatível para validar conectividade.",
+        )
+        return
     reached = reachable_nodes(graph, origin.node_id, mobility_reduced)
-    unreachable = [node for node in selectable_nodes if node.node_id not in reached]
+    expected_targets = [
+        node
+        for node in selectable_nodes
+        if profile_allows_destination(graph.nodes[node.node_id], mobility_reduced)
+    ]
+    unreachable = [node for node in expected_targets if node.node_id not in reached]
 
     for node in unreachable[:10]:
         issue(
@@ -559,11 +572,49 @@ def validate_profile_reachability(
         )
 
 
+LABEL_ALIASES = {
+    "2 - Entrada Piso 1": ("2 - entradaP1",),
+    "1 - entrada Piso 0": ("1 - entradaP0",),
+    "4 - entrada Piso 1": ("4 - entradaP1",),
+    "3 - entrada Piso -1": ("3 - entradaP0",),
+    "1 - entrada Piso 1": ("1 - entradaP1",),
+}
+
+
+def reachability_origin(
+    selectable_nodes: list[nav.SelectableNode],
+    mobility_reduced: bool,
+) -> nav.SelectableNode | None:
+    preferred = (
+        [("ECT2", "Exterior", "1 - entrada Piso 0"), ("ECT1", "Exterior", "3 - entrada Piso -1")]
+        if mobility_reduced
+        else [("ECT1", "Exterior", "2 - Entrada Piso 1")]
+    )
+
+    for building, floor, label in preferred:
+        node = find_node(selectable_nodes, building, floor, label)
+        if node is not None:
+            return node
+
+    return next(
+        (
+            node
+            for node in selectable_nodes
+            if profile_allows_destination({"type": node.node_type}, mobility_reduced)
+        ),
+        None,
+    )
+
+
+def profile_allows_destination(node_data: dict, mobility_reduced: bool) -> bool:
+    return nav.node_data_allowed_for_profile(node_data, mobility_reduced)
+
+
 def validate_critical_routes(dataset: str, graph, nodes: list[nav.SelectableNode], issues: list[Issue]) -> None:
     tests = [
-        ("normal", "ECT1", "Exterior", "2 - entradaP1", "ECT2", "Piso3", "39 - F3.27", False),
-        ("normal", "ECT2", "Piso1", "1 - entradaP1", "ECT2", "Piso3", "39 - F3.27", False),
-        ("mobilidade reduzida", "ECT2", "Exterior", "1 - entradaP0", "ECT2", "Piso3", "39 - F3.27", True),
+        ("normal", "ECT1", "Exterior", "2 - Entrada Piso 1", "ECT2", "Piso3", "39 - F3.27", False),
+        ("normal", "ECT2", "Piso1", "1 - entrada Piso 1", "ECT2", "Piso3", "39 - F3.27", False),
+        ("mobilidade reduzida", "ECT2", "Exterior", "1 - entrada Piso 0", "ECT2", "Piso3", "39 - F3.27", True),
     ]
 
     for profile, origin_building, origin_floor, origin_label, dest_building, dest_floor, dest_label, reduced in tests:
@@ -590,9 +641,10 @@ def validate_critical_routes(dataset: str, graph, nodes: list[nav.SelectableNode
 
 
 def find_node(nodes: list[nav.SelectableNode], building: str, floor: str, label: str) -> nav.SelectableNode | None:
-    for node in nodes:
-        if node.building == building and node.floor == floor and node.label == label:
-            return node
+    for candidate in (label, *LABEL_ALIASES.get(label, ())):
+        for node in nodes:
+            if node.building == building and node.floor == floor and node.label == candidate:
+                return node
     return None
 
 

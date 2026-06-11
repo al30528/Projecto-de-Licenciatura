@@ -104,6 +104,26 @@ def haversine(lat1, lon1, lat2, lon2):
 # 3. CONSTRUÇÃO DO GRAFO
 # =============================================================================
 
+def segment_edge_type(way_edge_type, node_a, node_b):
+    edge_type = (way_edge_type or 'connection').strip() or 'connection'
+    endpoint_types = {str(node_a.get('type', '')).lower(), str(node_b.get('type', '')).lower()}
+
+    if edge_type == 'stairs':
+        return 'stairs'
+    if edge_type == 'elevator' and 'elevator' not in endpoint_types:
+        return 'connection'
+    if edge_type == 'ramp' and endpoint_types.isdisjoint({'ramp', 'rampa'}):
+        return 'connection'
+    if edge_type == 'crosswalk':
+        if 'sidewalk' in endpoint_types:
+            return 'sidewalk'
+        if 'crosswalk' not in endpoint_types:
+            return 'connection'
+    if edge_type == 'sidewalk' and 'sidewalk' not in endpoint_types:
+        return 'connection'
+    return edge_type
+
+
 def build_graph(nodes, edges):
     """
     Constrói um grafo NetworkX a partir dos nós e arestas do OSM.
@@ -130,7 +150,11 @@ def build_graph(nodes, edges):
             
             # Extrair acessibilidade da aresta (default = 5, totalmente acessível)
             accessibility = int(way_tags.get('accessibility', 5))
-            edge_type = way_tags.get('edge_type', 'connection')
+            edge_type = segment_edge_type(
+                way_tags.get('edge_type', 'connection'),
+                nodes[n1]['tags'],
+                nodes[n2]['tags'],
+            )
             
             G.add_edge(
                 n1, n2,

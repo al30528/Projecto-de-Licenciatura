@@ -912,6 +912,7 @@ class AndroidNavigationApp(App):
 
         self.profile = profile
         self._sync_profile_labels()
+        self.refresh_option_lists(force_defaults=False)
         self.screen_manager.current = "planner"
         self.refresh_maps()
 
@@ -939,12 +940,23 @@ class AndroidNavigationApp(App):
             self._set_spinner_text_silently(self.visible_floor_spinner, self.origin_floor_spinner.text)
         self.refresh_maps()
 
+    def _profile_selectable_nodes(self):
+        """Devolve apenas os pontos adequados ao perfil escolhido."""
+
+        if self.profile is None:
+            return self.selectable_nodes
+        return nav.filter_selectable_nodes_for_profile(
+            self.selectable_nodes,
+            self.profile == "Mobilidade reduzida",
+        )
+
     def refresh_option_lists(self, force_defaults=False):
         """Reconstrói as opções das spinners com base no estado atual."""
 
         self._refreshing_options = True
         try:
-            buildings = nav.available_buildings(self.selectable_nodes)
+            selectable_nodes = self._profile_selectable_nodes()
+            buildings = nav.available_buildings(selectable_nodes)
             self._set_spinner_values(
                 self.origin_building_spinner,
                 buildings,
@@ -958,13 +970,20 @@ class AndroidNavigationApp(App):
                 force_defaults,
             )
 
-            self._refresh_floor_spinner(self.origin_building_spinner, self.origin_floor_spinner, force_defaults)
             self._refresh_floor_spinner(
+                selectable_nodes,
+                self.origin_building_spinner,
+                self.origin_floor_spinner,
+                force_defaults,
+            )
+            self._refresh_floor_spinner(
+                selectable_nodes,
                 self.destination_building_spinner,
                 self.destination_floor_spinner,
                 force_defaults,
             )
             self._refresh_node_spinner(
+                selectable_nodes,
                 self.origin_building_spinner,
                 self.origin_floor_spinner,
                 self.origin_spinner,
@@ -972,6 +991,7 @@ class AndroidNavigationApp(App):
                 choose_last=False,
             )
             self._refresh_node_spinner(
+                selectable_nodes,
                 self.destination_building_spinner,
                 self.destination_floor_spinner,
                 self.destination_spinner,
@@ -981,16 +1001,17 @@ class AndroidNavigationApp(App):
         finally:
             self._refreshing_options = False
 
-    def _refresh_floor_spinner(self, building_spinner, floor_spinner, force_defaults):
+    def _refresh_floor_spinner(self, selectable_nodes, building_spinner, floor_spinner, force_defaults):
         """Atualiza a lista de pisos disponíveis para um edifício."""
 
-        floors = nav.available_floors(self.selectable_nodes, building_spinner.text)
+        floors = nav.available_floors(selectable_nodes, building_spinner.text)
         floor_spinner.disabled = len(floors) <= 1
         default = "Piso1" if "Piso1" in floors else (floors[0] if floors else None)
         self._set_spinner_values(floor_spinner, floors, default, force_defaults)
 
     def _refresh_node_spinner(
         self,
+        selectable_nodes,
         building_spinner,
         floor_spinner,
         node_spinner,
@@ -999,7 +1020,7 @@ class AndroidNavigationApp(App):
     ):
         """Atualiza a lista de salas/entradas para edifício e piso selecionados."""
 
-        nodes = nav.nodes_for(self.selectable_nodes, building_spinner.text, floor_spinner.text)
+        nodes = nav.nodes_for(selectable_nodes, building_spinner.text, floor_spinner.text)
         labels = [node.label for node in nodes]
         default = labels[-1] if choose_last and labels else labels[0] if labels else None
         self._set_spinner_values(node_spinner, labels, default, force_defaults)
@@ -1050,11 +1071,19 @@ class AndroidNavigationApp(App):
             self.planner_status_label.text = "Escolhe uma origem e um destino válidos."
             return
 
+        mobility_reduced = self.profile == "Mobilidade reduzida"
+        if not nav.graph_node_allowed_for_profile(self.graph, origin, mobility_reduced):
+            self.planner_status_label.text = "A origem escolhida não é adequada ao perfil selecionado."
+            return
+        if not nav.graph_node_allowed_for_profile(self.graph, destination, mobility_reduced):
+            self.planner_status_label.text = "O destino escolhido não é adequado ao perfil selecionado."
+            return
+
         path, distance = nav.calculate_path(
             self.graph,
             origin,
             destination,
-            mobility_reduced=self.profile == "Mobilidade reduzida",
+            mobility_reduced=mobility_reduced,
         )
         if not path:
             self.route = None

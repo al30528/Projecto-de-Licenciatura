@@ -239,12 +239,14 @@ class DesktopNavigationApp(tk.Tk):
             text="Normal",
             variable=self.profile_var,
             value="normal",
+            command=self.refresh_node_lists,
         ).grid(row=1, column=0, sticky="w", pady=(4, 0))
         ttk.Radiobutton(
             sidebar,
             text="Mobilidade reduzida",
             variable=self.profile_var,
             value="reduced",
+            command=self.refresh_node_lists,
         ).grid(row=2, column=0, sticky="w")
 
         ttk.Separator(sidebar).grid(row=3, column=0, sticky="ew", pady=14)
@@ -531,6 +533,8 @@ class DesktopNavigationApp(tk.Tk):
                 continue
             if self._is_exterior_movement_point(name, floor, node_type):
                 continue
+            if not self._profile_allows_selectable_node(data, node_type):
+                continue
 
             # A label mantém o nodeID quando existe, para facilitar validação
             # cruzada com o JOSM/OSM durante testes e apresentação.
@@ -543,6 +547,7 @@ class DesktopNavigationApp(tk.Tk):
                     "building": building,
                     "floor": floor,
                     "type": node_type,
+                    "accessibility": str(data.get("accessibility", "1")).strip() or "1",
                     "label": f"{prefix}{name}",
                 }
             )
@@ -554,6 +559,14 @@ class DesktopNavigationApp(tk.Tk):
                 return 999999
 
         return sorted(nodes, key=sort_key)
+
+    def _profile_allows_selectable_node(self, data, node_type: str):
+        """Filtra origens/destinos que não são adequados ao perfil ativo."""
+
+        accessibility = str(data.get("accessibility", "1")).strip()
+        if self.profile_var.get() == "reduced":
+            return accessibility != "2" and node_type != "stairs"
+        return accessibility != "3" and node_type != "elevator"
 
     def _is_exterior_movement_point(self, name: str, floor: str, node_type: str):
         """Remove pontos exteriores usados apenas como nós intermédios do grafo."""
@@ -602,11 +615,25 @@ class DesktopNavigationApp(tk.Tk):
             )
             return
 
+        mobility_reduced = self.profile_var.get() == "reduced"
+        if not nav.graph_node_allowed_for_profile(self.graph, origin, mobility_reduced):
+            messagebox.showwarning(
+                "Origem incompatível",
+                "A origem escolhida não é adequada ao perfil selecionado.",
+            )
+            return
+        if not nav.graph_node_allowed_for_profile(self.graph, destination, mobility_reduced):
+            messagebox.showwarning(
+                "Destino incompatível",
+                "O destino escolhido não é adequado ao perfil selecionado.",
+            )
+            return
+
         path, distance = calculate_path(
             self.graph,
             origin,
             destination,
-            mobility_reduced=self.profile_var.get() == "reduced",
+            mobility_reduced=mobility_reduced,
         )
 
         if not path:
