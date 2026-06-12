@@ -1048,6 +1048,13 @@ def movement_phrase(graph, path: list[str], index: int):
     next_type = str(graph.nodes[path[index + 1]].get("type", "")).lower()
     current_floor = str(graph.nodes[path[index]].get("floor_key", ""))
     next_floor = str(graph.nodes[path[index + 1]].get("floor_key", ""))
+    # Algumas escadas estao desenhadas como varios segmentos consecutivos na
+    # mesma way. Guardo o tipo anterior para nao repetir "segue ate as escadas"
+    # quando o utilizador ja vem precisamente dessas escadas.
+    previous_edge_type = ""
+    if index > 0:
+        previous_edge = graph[path[index - 1]][path[index]]
+        previous_edge_type = str(previous_edge.get("edge_type", "")).lower()
     hint = upcoming_destination_hint(graph, path, index)
 
     if current_floor == "Exterior" and next_floor != "Exterior":
@@ -1070,6 +1077,10 @@ def movement_phrase(graph, path: list[str], index: int):
             return "segue até à rampa"
         return "segue pela rampa"
     if edge_type == "stairs":
+        # Se a aresta anterior tambem era escada, continuo a dar distancia, mas
+        # nao volto a anunciar as escadas como se fossem um novo elemento.
+        if previous_edge_type == "stairs":
+            return "avança"
         return "segue até às escadas"
     if edge_type == "elevator":
         return "segue até ao elevador"
@@ -1241,9 +1252,12 @@ def navigation_instruction(graph, route: RouteState):
     next_text = navigation_point_name(graph, next_node)
     distance = edge.get("length", edge.get("weight", 0))
     turn_text = turn_instruction(graph, path, index)
-    movement = movement_with_distance(movement_phrase(graph, path, index), distance)
+    phrase = movement_phrase(graph, path, index)
+    movement = movement_with_distance(phrase, distance)
     if turn_text:
-        movement = f"{turn_text} e {movement}"
+        # Quando a frase semantica ficou reduzida a "avanca", a viragem ja e a
+        # informacao util. Evito "vira a direita e avanca", que soa redundante.
+        movement = f"{turn_text} ({distance:.1f} m)" if phrase == "avança" else f"{turn_text} e {movement}"
     return (
         f"{progress}\n\n"
         f"Local atual: {current_text}\n"

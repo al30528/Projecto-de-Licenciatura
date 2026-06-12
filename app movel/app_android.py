@@ -12,6 +12,7 @@ from __future__ import annotations
 import urllib.error
 import urllib.request
 import ssl
+from math import hypot
 from pathlib import Path
 
 from kivy.app import App
@@ -81,6 +82,12 @@ class GraphMapWidget(StencilView):
         self._drag_touch_id = None
         self._drag_start = None
         self._drag_start_center = None
+        # Guardo os toques ativos para distinguir arrasto com um dedo de pinch
+        # com dois dedos. Isto evita depender de gestos específicos do sistema.
+        self._active_touches = {}
+        self._pinch_touch_ids = None
+        self._pinch_start_distance = None
+        self._pinch_start_zoom = None
         self._last_world_scale = 1.0
         self._last_view_center = None
         # As imagens e os tiles são mantidos em cache para evitar releituras
@@ -147,16 +154,60 @@ class GraphMapWidget(StencilView):
     def _change_zoom(self, multiplier):
         """Atualiza o fator de zoom e redesenha o mapa."""
 
-        if self.map_center is None or self.map_center_floor != self.visible_floor:
-            # Quando o utilizador faz zoom antes de haver uma rota, parto do
-            # último centro visível. Isto evita saltos estranhos no mapa.
-            self.map_center = self._last_view_center
-            self.map_center_floor = self.visible_floor if self.map_center else None
-            if self.map_center is None:
-                self.center_on_current_route(redraw=False)
-
+        self._ensure_zoom_center()
         self.map_zoom = max(0.6, min(8.0, self.map_zoom * multiplier))
         self.redraw()
+
+    def _ensure_zoom_center(self):
+        """Garante que há um centro de mapa válido antes de aplicar zoom."""
+
+        if self.map_center is not None and self.map_center_floor == self.visible_floor:
+            return
+
+        # Quando faço zoom antes de haver uma rota, parto do último centro
+        # visível. Isto evita saltos estranhos no mapa.
+        self.map_center = self._last_view_center
+        self.map_center_floor = self.visible_floor if self.map_center else None
+        if self.map_center is None:
+            self.center_on_current_route(redraw=False)
+
+    def _touch_distance(self, first_uid, second_uid):
+        """Calcula a distância em píxeis entre dois toques ativos."""
+
+        first = self._active_touches.get(first_uid)
+        second = self._active_touches.get(second_uid)
+        if first is None or second is None:
+            return None
+        return hypot(second[0] - first[0], second[1] - first[1])
+
+    def _start_pinch(self):
+        """Ativa o zoom por dois dedos usando o centro atual da vista."""
+
+        if len(self._active_touches) < 2:
+            return False
+
+        first_uid, second_uid = list(self._active_touches.keys())[:2]
+        distance = self._touch_distance(first_uid, second_uid)
+        if distance is None or distance < 8:
+            return False
+
+        # O pinch usa o centro atual da janela como referência. Assim o mapa
+        # aproxima/afasta sem saltar para a posição média dos dedos.
+        self._ensure_zoom_center()
+        self._pinch_touch_ids = (first_uid, second_uid)
+        self._pinch_start_distance = distance
+        self._pinch_start_zoom = self.map_zoom
+        self._drag_touch_id = None
+        self._drag_start = None
+        self._drag_start_center = None
+        return True
+
+    def _reset_pinch(self):
+        """Sai do modo pinch quando um dos dedos deixa o mapa."""
+
+        self._pinch_touch_ids = None
+        self._pinch_start_distance = None
+        self._pinch_start_zoom = None
 
     def _current_route_focus_key(self):
         """Identifica o ponto atual para recentrar apenas quando a navegação avança."""
@@ -312,6 +363,11 @@ class GraphMapWidget(StencilView):
 
         if not self.collide_point(*touch.pos):
             return super().on_touch_down(touch)
+        self._active_touches[touch.uid] = touch.pos
+        if self._pinch_touch_ids is not None:
+            return True
+        if len(self._active_touches) >= 2 and self._start_pinch():
+            return True
         if self._drag_touch_id is not None:
             return super().on_touch_down(touch)
 
@@ -323,6 +379,26 @@ class GraphMapWidget(StencilView):
 
     def on_touch_move(self, touch):
         """Desloca a vista do mapa enquanto o dedo/mouse é arrastado."""
+
+        if touch.uid in self._active_touches:
+            self._active_touches[touch.uid] = touch.pos
+
+        if self._pinch_touch_ids is not None and touch.uid in self._pinch_touch_ids:
+            distance = self._touch_distance(*self._pinch_touch_ids)
+            if (
+                distance is None
+                or self._pinch_start_distance is None
+                or self._pinch_start_zoom is None
+            ):
+                return True
+
+            # A escala do pinch é simplesmente a variação da distância entre os
+            # dedos desde o início do gesto.
+            ratio = distance / max(self._pinch_start_distance, 1)
+            self.map_zoom = max(0.6, min(8.0, self._pinch_start_zoom * ratio))
+            self.map_center_floor = self.visible_floor
+            self.redraw()
+            return True
 
         if touch.uid != self._drag_touch_id or self._drag_start_center is None:
             return super().on_touch_move(touch)
@@ -342,6 +418,11 @@ class GraphMapWidget(StencilView):
 
     def on_touch_up(self, touch):
         """Termina o arrasto atual do mapa."""
+
+        self._active_touches.pop(touch.uid, None)
+        if self._pinch_touch_ids is not None and touch.uid in self._pinch_touch_ids:
+            self._reset_pinch()
+            return True
 
         if touch.uid != self._drag_touch_id:
             return super().on_touch_up(touch)

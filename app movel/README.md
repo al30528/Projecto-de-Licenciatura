@@ -22,6 +22,9 @@ pasta `OSM Pisos/` e as suas próprias imagens. Não depende da pasta
 2. Página de planeamento: seleção de origem/destino e visualização do mapa.
 3. Página de navegação: resumo da rota, instrução do passo atual, mapa, botão `Próximo ponto` e botão `Cancelar`.
 
+Os mapas permitem zoom pelos botões `+`/`-`, recentrar com `Centrar` e, no
+telemóvel, zoom por gesto pinch.
+
 ## Testar no computador
 
 ```bash
@@ -32,15 +35,30 @@ python app_android.py
 
 ## Gerar APK
 
-Usa Linux ou WSL:
+Para gerar o APK é necessário usar Linux ou WSL com Buildozer. O
+`python-for-android` não aceita caminhos com espaços no diretório de build, por
+isso não devo compilar diretamente dentro da pasta do Windows deste projeto.
+
+No Ubuntu/WSL, entro na raiz do repositório e copio primeiro a app para uma
+pasta sem espaços:
 
 ```bash
-cd "app movel"
+cd /caminho/para/Projecto-de-Licenciatura
+rm -rf ~/navegacao-utad-mobile
+cp -r "app movel" ~/navegacao-utad-mobile
+cd ~/navegacao-utad-mobile
 pip install buildozer
-buildozer android debug
+buildozer -v android debug
 ```
 
 O APK fica em `bin/`.
+
+Para copiar o APK gerado para uma pasta do Windows, substitui o destino pelo
+caminho pretendido:
+
+```bash
+cp bin/*.apk /mnt/c/caminho/para/pasta-destino/
+```
 
 ## Validação
 

@@ -205,7 +205,7 @@ Tal como no desktop, a app móvel suporta:
 
 - escolha inicial do perfil;
 - seleção por edifício, piso/área e ponto;
-- mapa com zoom por botões;
+- mapa com zoom por botões, recentrar e gesto pinch-to-zoom no telemóvel;
 - navegação passo a passo com confirmação de chegada;
 - filtros de mobilidade reduzida.
 
@@ -222,12 +222,17 @@ E executa:
 python app_android.py
 ```
 
-Para gerar APK, usa Linux ou WSL com Buildozer instalado:
+Para gerar APK, usa Linux ou WSL com Buildozer instalado. O `python-for-android`
+não aceita caminhos com espaços no diretório de build, por isso devo copiar a
+app móvel para uma pasta Linux/WSL sem espaços antes de compilar:
 
 ```bash
-cd "app movel"
+cd /caminho/para/o/repositorio
+rm -rf ~/navegacao-utad-mobile
+cp -r "app movel" ~/navegacao-utad-mobile
+cd ~/navegacao-utad-mobile
 pip install buildozer
-buildozer android debug
+buildozer -v android debug
 ```
 
 O APK gerado ficará na pasta `bin/`, que é ignorada pelo Git.
