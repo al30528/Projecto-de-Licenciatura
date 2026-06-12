@@ -9,7 +9,7 @@ O que mudou em relação à versão usada no Spyder/Anaconda:
     - permite escolher o piso pelo terminal: --piso Piso1 / Piso2 / Piso3 / Exterior;
     - permite indicar origem/destino pelo nodeID lógico ou pelo ID OSM;
     - evita caminhos fixos dependentes do Spyder;
-    - aceita tanto a tag "accessibility" como a tag escrita no OSM como "accessibilty".
+    - usa a tag "accessibility" para classificar a acessibilidade das arestas.
 
 Requisitos:
     pip install matplotlib networkx
@@ -58,10 +58,7 @@ OSM_FILES = {
 # =============================================================================
 
 def read_int_tag(tags: dict[str, str], keys: tuple[str, ...], default: int) -> int:
-    """
-    Lê uma tag inteira com tolerância para nomes diferentes.
-    No teu OSM apareceu várias vezes "accessibilty" sem o segundo "i".
-    """
+    """Lê uma tag inteira a partir de uma lista de nomes aceites."""
     for key in keys:
         value = tags.get(key)
         if value is not None:
@@ -184,6 +181,28 @@ def haversine(lat1, lon1, lat2, lon2):
 # 4. CONSTRUÇÃO DO GRAFO
 # =============================================================================
 
+def segment_edge_type(way_edge_type: str, node_a: dict, node_b: dict) -> str:
+    """Aplica o edge_type da way apenas ao segmento onde faz sentido."""
+
+    edge_type = (way_edge_type or "connection").strip() or "connection"
+    endpoint_types = {str(node_a.get("type", "")).lower(), str(node_b.get("type", "")).lower()}
+
+    if edge_type == "stairs":
+        return "stairs"
+    if edge_type == "elevator" and "elevator" not in endpoint_types:
+        return "connection"
+    if edge_type == "ramp" and endpoint_types.isdisjoint({"ramp", "rampa"}):
+        return "connection"
+    if edge_type == "crosswalk":
+        if "sidewalk" in endpoint_types:
+            return "sidewalk"
+        if "crosswalk" not in endpoint_types:
+            return "connection"
+    if edge_type == "sidewalk" and "sidewalk" not in endpoint_types:
+        return "connection"
+    return edge_type
+
+
 def build_graph(nodes, edges):
     """
     Constrói um grafo NetworkX a partir dos nós e arestas do OSM.
@@ -217,13 +236,16 @@ def build_graph(nodes, edges):
                 nodes[n2]["lon"],
             )
 
-            # Aceita "accessibility" e também "accessibilty".
             accessibility = read_int_tag(
                 way_tags,
-                keys=("accessibility", "accessibilty"),
+                keys=("accessibility",),
                 default=1,
             )
-            edge_type = way_tags.get("type", "connection")
+            edge_type = segment_edge_type(
+                way_tags.get("edge_type", "connection"),
+                nodes[n1]["tags"],
+                nodes[n2]["tags"],
+            )
 
             graph.add_edge(
                 n1,
@@ -568,7 +590,7 @@ def list_named_nodes(graph):
                 "tipo": data.get("type", "?"),
                 "piso": data.get("floor", "?"),
                 "edificio": data.get("building", "?"),
-                "accessibility": data.get("accessibility", data.get("accessibilty", "?")),
+                "accessibility": data.get("accessibility", "?"),
             })
 
     def sort_key(item):
