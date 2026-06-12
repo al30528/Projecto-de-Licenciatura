@@ -1,5 +1,11 @@
 # -*- coding: utf-8 -*-
-"""Protótipo Android em Kivy para navegação pedestre indoor na UTAD."""
+"""Protótipo Android em Kivy para navegação pedestre indoor na UTAD.
+
+Este ficheiro fica responsável pela interface móvel. A lógica de dados,
+OSM, Dijkstra, acessibilidade e instruções está concentrada no
+``navigation_core.py`` desta pasta. A app desktop tem a sua própria cópia para
+as duas apps não dependerem uma da outra.
+"""
 
 from __future__ import annotations
 
@@ -48,7 +54,13 @@ class Surface(BoxLayout):
 
 
 class GraphMapWidget(StencilView):
-    """Canvas simples para ver o grafo e a rota no ecrã móvel."""
+    """Canvas de mapa usado tanto no planeamento como na navegação móvel.
+
+    O widget desenha imagens calibradas, tiles OpenStreetMap, grafo e rota no
+    mesmo sistema de coordenadas Web Mercator. O ``StencilView`` é importante
+    porque impede que linhas e pontos do grafo fiquem desenhados por cima dos
+    controlos quando há zoom ou arrasto.
+    """
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -61,6 +73,8 @@ class GraphMapWidget(StencilView):
         self.visible_floor = "Exterior"
         self.show_labels = False
         self.map_zoom = 1.0
+        # Guardo o centro em coordenadas de mundo para o zoom e o arrasto serem
+        # independentes do tamanho do ecrã do telemóvel.
         self.map_center = None
         self.map_center_floor = None
         self._route_focus_key = None
@@ -69,6 +83,8 @@ class GraphMapWidget(StencilView):
         self._drag_start_center = None
         self._last_world_scale = 1.0
         self._last_view_center = None
+        # As imagens e os tiles são mantidos em cache para evitar releituras
+        # constantes no Android, onde o armazenamento é mais lento.
         self._texture_cache = {}
         self._image_cache = {}
         self.tile_cache_dir = nav.BASE_DIR / ".tile_cache" / "osm_carto_android"
@@ -95,6 +111,8 @@ class GraphMapWidget(StencilView):
 
         focus_key = self._current_route_focus_key()
         if focus_key is not None and focus_key != self._route_focus_key:
+            # Só recentro automaticamente quando a rota avança para outro ponto;
+            # se o utilizador arrastar o mapa, não quero roubar esse controlo.
             self.center_on_current_route(redraw=False)
         self._route_focus_key = focus_key
         self.redraw()
@@ -130,6 +148,8 @@ class GraphMapWidget(StencilView):
         """Atualiza o fator de zoom e redesenha o mapa."""
 
         if self.map_center is None or self.map_center_floor != self.visible_floor:
+            # Quando o utilizador faz zoom antes de haver uma rota, parto do
+            # último centro visível. Isto evita saltos estranhos no mapa.
             self.map_center = self._last_view_center
             self.map_center_floor = self.visible_floor if self.map_center else None
             if self.map_center is None:
@@ -255,6 +275,9 @@ class GraphMapWidget(StencilView):
         usable_width = max(self.width - margin * 2, 1)
         usable_height = max(self.height - margin * 2, 1)
         target_ratio = usable_width / usable_height
+        # Ajusto a caixa do mundo ao rácio do widget para o mapa não ficar
+        # deformado. O zoom aumenta a escala, e o centro define que zona fica
+        # visível dentro da mesma janela.
         view_width = range_x
         view_height = range_y
         current_ratio = view_width / view_height if view_height else target_ratio
@@ -305,6 +328,8 @@ class GraphMapWidget(StencilView):
             return super().on_touch_move(touch)
 
         scale = max(self._last_world_scale, 0.000001)
+        # Arrastar para a direita deve revelar o conteúdo que estava à esquerda;
+        # por isso o centro do mundo move-se no sentido oposto ao gesto.
         delta_x = (touch.x - self._drag_start[0]) / scale
         delta_y = (touch.y - self._drag_start[1]) / scale
         self.map_center = (
@@ -336,7 +361,12 @@ class GraphMapWidget(StencilView):
         )
 
     def _clip_segment_to_map(self, start, end):
-        """Corta uma linha ao retângulo do mapa para impedir desenho fora da caixa."""
+        """Corta uma linha ao retângulo do mapa para impedir desenho fora da caixa.
+
+        Uso uma forma simples do algoritmo de Liang-Barsky para desenhar apenas
+        o troço visível de cada aresta. Isto foi necessário para resolver o
+        clipping dos pontos/linhas por cima das dropdowns no ecrã móvel.
+        """
 
         min_x, min_y = self.x, self.y
         max_x, max_y = self.right, self.top
@@ -385,6 +415,8 @@ class GraphMapWidget(StencilView):
         # `texture.tex_coords` respeita eventuais inversões internas feitas pelo
         # loader Kivy. A ordem dos cantos do world file é:
         # top-left, top-right, bottom-right, bottom-left.
+        # Uso Mesh, e não Rectangle, porque as imagens calibradas podem estar
+        # rodadas em relação ao ecrã.
         tex = texture.tex_coords
         tex_coords = [
             (tex[6], tex[7]),
@@ -454,6 +486,8 @@ class GraphMapWidget(StencilView):
             if texture is None:
                 continue
 
+            # Cada tile é desenhado no seu retângulo real Web Mercator. O grafo
+            # exterior usa o mesmo sistema, por isso as linhas ficam alinhadas.
             min_x, max_x, min_y, max_y = extent
             left, bottom = world_to_screen((min_x, min_y))
             right, top = world_to_screen((max_x, max_y))
@@ -480,7 +514,7 @@ class GraphMapWidget(StencilView):
         try:
             # Em alguns builds Android, o Python consegue usar SSL mas não
             # encontra a store de certificados do sistema. Para o protótipo,
-            # aceitamos a tile HTTPS sem validação para não perder o fundo OSM.
+            # aceito a tile HTTPS sem validação para não perder o fundo OSM.
             context = ssl._create_unverified_context() if url.startswith("https://") else None
             with urllib.request.urlopen(request, timeout=8, context=context) as response:
                 tile_path.write_bytes(response.read())
@@ -635,7 +669,12 @@ class GraphMapWidget(StencilView):
 
 
 class AndroidNavigationApp(App):
-    """Aplicação Android atual com ecrã de perfil, planeamento e navegação."""
+    """Aplicação Android atual com ecrã de perfil, planeamento e navegação.
+
+    Mantive três ecrãs separados para ficar próximo do fluxo esperado numa app
+    móvel: primeiro o perfil, depois a escolha de locais, e por fim a navegação
+    passo a passo.
+    """
 
     title = "Navegação UTAD"
 
@@ -654,6 +693,8 @@ class AndroidNavigationApp(App):
         self.screen_manager.add_widget(self._build_planner_screen())
         self.screen_manager.add_widget(self._build_navigation_screen())
 
+        # Carrego o campus depois de criar os widgets para poder mostrar erros
+        # diretamente nas labels da interface se algum ficheiro OSM/imagem falhar.
         Clock.schedule_once(lambda *_: self.load_campus(), 0)
         return self.screen_manager
 
@@ -840,6 +881,8 @@ class AndroidNavigationApp(App):
     def _build_location_controls(self):
         """Cria os controlos de edifício, piso, sala/entrada e mapa visível."""
 
+        # No telemóvel os controlos precisam de ficar compactos. Uso um
+        # ScrollView para continuar acessível em ecrãs mais pequenos.
         scroll = ScrollView(size_hint_y=None, height=dp(250), do_scroll_x=False)
         grid = GridLayout(cols=2, spacing=dp(6), size_hint_y=None)
         grid.bind(minimum_height=grid.setter("height"))
@@ -957,6 +1000,9 @@ class AndroidNavigationApp(App):
         try:
             selectable_nodes = self._profile_selectable_nodes()
             buildings = nav.available_buildings(selectable_nodes)
+            # A ordem importa: primeiro edifício, depois piso, e só no fim os
+            # pontos. Assim evito uma seleção de sala que já não pertence ao
+            # edifício/piso visível.
             self._set_spinner_values(
                 self.origin_building_spinner,
                 buildings,
@@ -1071,6 +1117,8 @@ class AndroidNavigationApp(App):
             self.planner_status_label.text = "Escolhe uma origem e um destino válidos."
             return
 
+        # Mesmo que a interface filtre as opções, volto a validar aqui. Se uma
+        # Spinner ficar num estado antigo por bug, a rota não deve violar o perfil.
         mobility_reduced = self.profile == "Mobilidade reduzida"
         if not nav.graph_node_allowed_for_profile(self.graph, origin, mobility_reduced):
             self.planner_status_label.text = "A origem escolhida não é adequada ao perfil selecionado."
@@ -1135,6 +1183,8 @@ class AndroidNavigationApp(App):
 
         show_labels = self.show_labels_checkbox.active if hasattr(self, "show_labels_checkbox") else False
         visible_floor = self.visible_floor_spinner.text if hasattr(self, "visible_floor_spinner") else "Exterior"
+        # O mapa de planeamento mostra só contexto; o mapa de navegação recebe
+        # a rota para destacar progresso e ponto atual.
         if hasattr(self, "planner_map_widget"):
             self.planner_map_widget.set_state(
                 self.graph,

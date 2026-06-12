@@ -2,6 +2,10 @@
 
 Esta pasta contém o protótipo Python/Kivy da aplicação móvel Android.
 
+A app móvel é autónoma: usa o seu próprio `navigation_core.py`, a sua própria
+pasta `OSM Pisos/` e as suas próprias imagens. Não depende da pasta
+`App Desktop/`.
+
 ## Conteúdo
 
 - `app_android.py`: interface móvel.
@@ -21,6 +25,7 @@ Esta pasta contém o protótipo Python/Kivy da aplicação móvel Android.
 ## Testar no computador
 
 ```bash
+cd "app movel"
 pip install -r requirements-android.txt
 python app_android.py
 ```
@@ -30,8 +35,18 @@ python app_android.py
 Usa Linux ou WSL:
 
 ```bash
+cd "app movel"
 pip install buildozer
 buildozer android debug
 ```
 
 O APK fica em `bin/`.
+
+## Validação
+
+Os scripts de validação ficam na raiz do repositório e testam desktop e mobile:
+
+```bash
+python validar_osm.py
+python testar_rotas.py
+```

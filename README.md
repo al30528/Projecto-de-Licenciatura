@@ -8,17 +8,19 @@ A aplicação lê os ficheiros OSM dos pisos e do exterior, constrói um grafo n
 
 ```text
 .
-├── navegacao_campus_vscode.py
-├── app_desktop.py
-├── navigation_core.py
+├── App Desktop/
+│   ├── app_desktop.py
+│   ├── navegacao_campus_vscode.py
+│   ├── navigation_core.py
+│   ├── requirements.txt
+│   ├── OSM Pisos/
+│   │   ├── Exterior.osm
+│   │   ├── Piso1.osm
+│   │   ├── Piso2.osm
+│   │   └── Piso3.osm
+│   └── Imagens ECT2/
 ├── validar_osm.py
 ├── testar_rotas.py
-├── OSM Pisos/
-│   ├── Exterior.osm
-│   ├── Piso1.osm
-│   ├── Piso2.osm
-│   └── Piso3.osm
-├── Imagens ECT2/
 ├── app movel/
 │   ├── app_android.py
 │   ├── main.py
@@ -27,14 +29,15 @@ A aplicação lê os ficheiros OSM dos pisos e do exterior, constrói um grafo n
 │   ├── OSM Pisos/
 │   └── Imagens ECT2/
 ├── README.md
-├── requirements.txt
 └── .gitignore
 ```
 
 Notas:
 
-- A pasta `OSM Pisos/` contém os ficheiros de dados usados pela app desktop.
+- A pasta `App Desktop/` contém a aplicação desktop completa, incluindo core próprio, OSM, imagens e requisitos.
 - A pasta `app movel/` contém uma versão autónoma para Kivy/Android, com cópias próprias dos OSM e imagens.
+- As duas aplicações têm `navigation_core.py` próprio para não dependerem uma da outra.
+- Cada pasta de aplicação tem um README próprio com instruções específicas.
 - Os ficheiros `.osm` não devem ser alterados sem validação prévia, porque representam a base cartográfica do projecto.
 - A pasta `Nova pasta/`, PDFs de apoio e imagens locais de WhatsApp são ignorados no Git.
 
@@ -56,9 +59,10 @@ Notas:
 
 ## Instalação
 
-No terminal, dentro da pasta do projecto:
+No terminal, dentro da pasta da app desktop:
 
 ```bash
+cd "App Desktop"
 python -m venv .venv
 ```
 
@@ -79,6 +83,7 @@ Se estiveres a usar Anaconda, podes criar um ambiente equivalente:
 ```bash
 conda create -n navegacao-utad python=3.11
 conda activate navegacao-utad
+cd "App Desktop"
 pip install -r requirements.txt
 ```
 
@@ -87,12 +92,14 @@ pip install -r requirements.txt
 Executar o script com o piso por defeito (`Piso1`):
 
 ```bash
+cd "App Desktop"
 python navegacao_campus_vscode.py
 ```
 
 Escolher um piso:
 
 ```bash
+cd "App Desktop"
 python navegacao_campus_vscode.py --piso Piso1
 python navegacao_campus_vscode.py --piso Piso2
 python navegacao_campus_vscode.py --piso Piso3
@@ -102,12 +109,14 @@ python navegacao_campus_vscode.py --piso Exterior
 Indicar origem e destino:
 
 ```bash
+cd "App Desktop"
 python navegacao_campus_vscode.py --piso Piso2 --origem 32 --destino 19
 ```
 
 Usar directamente um ficheiro OSM:
 
 ```bash
+cd "App Desktop"
 python navegacao_campus_vscode.py --ficheiro "OSM Pisos/Piso3.osm" --origem 1 --destino 38
 ```
 
@@ -118,6 +127,7 @@ A interface desktop é a versão principal de validação funcional. Permite tes
 Executar:
 
 ```bash
+cd "App Desktop"
 python app_desktop.py
 ```
 
@@ -174,7 +184,7 @@ Este validador verifica, entre outros pontos:
 
 ## Protótipo Android
 
-Existe uma segunda aplicação Python pensada para Android, baseada na lógica comum do protótipo desktop mas construída com Kivy.
+Existe uma segunda aplicação Python pensada para Android, baseada na mesma lógica do protótipo desktop mas construída com Kivy e isolada numa pasta própria.
 
 A app móvel está isolada na pasta `app movel/`. Essa pasta contém os ficheiros da aplicação e cópias das pastas necessárias para funcionar de forma autónoma:
 
@@ -183,7 +193,7 @@ A app móvel está isolada na pasta `app movel/`. Essa pasta contém os ficheiro
 
 Ficheiros principais:
 
-- `app movel/navigation_core.py`: lógica comum de grafos, filtros por edifício/piso/perfil, cálculo de rota e texto de navegação;
+- `app movel/navigation_core.py`: lógica própria da app móvel para grafos, filtros por edifício/piso/perfil, cálculo de rota e texto de navegação;
 - `app movel/app_android.py`: interface móvel em Kivy;
 - `app movel/main.py`: ponto de entrada usado pelo Buildozer;
 - `app movel/buildozer.spec`: configuração inicial para gerar APK;

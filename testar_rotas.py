@@ -1,9 +1,15 @@
 # -*- coding: utf-8 -*-
-"""Testes automáticos da navegação UTAD.
+"""Testes automáticos e de regressão da navegação UTAD.
 
-Este script testa a lógica comum usada pela app desktop e pela app móvel. Não
-abre janelas: valida o grafo, as regras gerais dos perfis, a semântica das
-instruções por tipo de aresta e alguns casos reais que já deram problemas.
+Este script testa as duas lógicas autónomas usadas pela app desktop e pela app
+móvel. Não abre janelas: valida o grafo, as regras gerais dos perfis, a
+semântica das instruções por tipo de aresta e alguns casos reais que já deram
+problemas.
+
+Não substitui uma suite formal de testes unitários, mas cobre o que é mais
+crítico para o projeto: o grafo tem de ser válido, os perfis têm de respeitar
+escadas/elevador, as distâncias têm de bater certo com as arestas e as
+instruções principais não podem perder semântica importante.
 """
 
 from __future__ import annotations
@@ -15,7 +21,11 @@ from pathlib import Path
 
 
 ROOT_DIR = Path(__file__).resolve().parent
+DESKTOP_DIR = ROOT_DIR / "App Desktop"
 MOBILE_DIR = ROOT_DIR / "app movel"
+# Estes valores devem acompanhar os edge_type aceites pelo validador e pelo
+# navigation_core. Se surgir uma nova classe de caminho no JOSM, ela deve entrar
+# nos três sítios.
 ALLOWED_EDGE_TYPES = {
     "connection",
     "crosswalk",
@@ -38,6 +48,8 @@ FORBIDDEN_EDGE_TYPES_BY_PROFILE = {
 
 @dataclass(frozen=True)
 class RouteCase:
+    """Caso de rota manual que protege um comportamento importante."""
+
     name: str
     origin_building: str
     origin_floor: str
@@ -168,26 +180,36 @@ LABEL_ALIASES = {
 }
 
 
-def load_desktop_core():
-    import navigation_core as core
+def load_core_from(root: Path, module_name: str):
+    """Carrega um navigation_core.py sem misturar os módulos desktop/mobile."""
 
-    return core
-
-
-def load_mobile_core():
-    module_path = MOBILE_DIR / "navigation_core.py"
-    spec = importlib.util.spec_from_file_location("_utad_mobile_navigation_core_tests", module_path)
+    module_path = root / "navigation_core.py"
+    spec = importlib.util.spec_from_file_location(module_name, module_path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"Não foi possível carregar {module_path}")
 
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
-    module.configure_paths(MOBILE_DIR)
+    module.configure_paths(root)
     return module
 
 
+def load_desktop_core():
+    """Carrega o core autónomo da app desktop."""
+
+    return load_core_from(DESKTOP_DIR, "_utad_desktop_navigation_core_tests")
+
+
+def load_mobile_core():
+    """Carrega o core móvel diretamente da pasta da app Android."""
+
+    return load_core_from(MOBILE_DIR, "_utad_mobile_navigation_core_tests")
+
+
 def find_node(core, selectable_nodes, building: str, floor: str, label: str):
+    """Procura um ponto selecionável, aceitando labels antigas como aliases."""
+
     for candidate in (label, *LABEL_ALIASES.get(label, ())):
         node_id = core.find_selectable_node(selectable_nodes, candidate, building, floor)
         if node_id:
@@ -196,6 +218,8 @@ def find_node(core, selectable_nodes, building: str, floor: str, label: str):
 
 
 def route_edge_types(graph, path: list[str]) -> list[str]:
+    """Extrai a sequência de edge_type usada por uma rota."""
+
     return [
         str(graph[path[index]][path[index + 1]].get("edge_type", "connection"))
         for index in range(len(path) - 1)
@@ -203,6 +227,8 @@ def route_edge_types(graph, path: list[str]) -> list[str]:
 
 
 def route_real_distance(graph, path: list[str]) -> float:
+    """Soma os metros reais das arestas para comparar com o Dijkstra."""
+
     return round(
         sum(
             graph[path[index]][path[index + 1]].get(
@@ -215,6 +241,8 @@ def route_real_distance(graph, path: list[str]) -> float:
 
 
 def assert_reported_distance_is_real(graph, path: list[str], distance: float, context: str):
+    """Garante que a distância devolvida corresponde ao comprimento da rota."""
+
     expected = route_real_distance(graph, path)
     if abs(distance - expected) > 0.01:
         raise AssertionError(
@@ -223,6 +251,8 @@ def assert_reported_distance_is_real(graph, path: list[str], distance: float, co
 
 
 def assert_instruction_contains(core, graph, path, distance, index: int, fragments: tuple[str, ...]):
+    """Confirma que uma instrução contém os fragmentos esperados."""
+
     route = core.RouteState(graph, path, distance, current_index=index)
     instruction = core.navigation_instruction(graph, route).lower()
     missing = [fragment for fragment in fragments if fragment.lower() not in instruction]
@@ -234,6 +264,8 @@ def assert_instruction_contains(core, graph, path, distance, index: int, fragmen
 
 
 def assert_instruction_excludes(core, graph, path, distance, index: int, fragments: tuple[str, ...]):
+    """Confirma que uma instrução não contém texto que seria enganador."""
+
     route = core.RouteState(graph, path, distance, current_index=index)
     instruction = core.navigation_instruction(graph, route).lower()
     unexpected = [fragment for fragment in fragments if fragment.lower() in instruction]
@@ -245,14 +277,20 @@ def assert_instruction_excludes(core, graph, path, distance, index: int, fragmen
 
 
 def profile_candidate_nodes(core, selectable_nodes, mobility_reduced: bool):
+    """Filtra os pontos que um perfil pode usar como origem/destino."""
+
     return core.filter_selectable_nodes_for_profile(selectable_nodes, mobility_reduced)
 
 
 def edge_allowed_for_profile(edge: dict, mobility_reduced: bool) -> bool:
+    """Replica a regra essencial de edge_type proibido por perfil."""
+
     return edge.get("edge_type") not in FORBIDDEN_EDGE_TYPES_BY_PROFILE[mobility_reduced]
 
 
 def reachable_nodes(graph, start: str, mobility_reduced: bool) -> set[str]:
+    """Calcula alcance respeitando as restrições do perfil."""
+
     reached = {start}
     pending = [start]
     while pending:
@@ -268,6 +306,8 @@ def reachable_nodes(graph, start: str, mobility_reduced: bool) -> set[str]:
 
 
 def assert_route_instruction_sequence(core, graph, path, distance, context: str):
+    """Valida todas as instruções geradas ao longo de uma rota."""
+
     for index in range(len(path) - 1):
         route = core.RouteState(graph, path, distance, current_index=index)
         instruction = core.navigation_instruction(graph, route).lower()
@@ -279,6 +319,8 @@ def assert_route_instruction_sequence(core, graph, path, distance, context: str)
 
 
 def assert_vertical_instruction_semantics(core, graph, route, index: int, instruction: str, context: str):
+    """Confirma se transições entre pisos mencionam elevador/escadas e direção."""
+
     path = route.path
     edge = graph[path[index]][path[index + 1]]
     if not edge.get("vertical"):
@@ -315,6 +357,8 @@ def assert_vertical_instruction_semantics(core, graph, route, index: int, instru
 
 
 def assert_movement_semantics(core, graph, current: str, next_node: str, edge: dict):
+    """Testa se o texto do próximo movimento combina com o tipo de aresta/nó."""
+
     edge_type = str(edge.get("edge_type", "connection")).lower()
     current_data = graph.nodes[current]
     next_data = graph.nodes[next_node]
@@ -375,6 +419,8 @@ def assert_movement_semantics(core, graph, current: str, next_node: str, edge: d
 
 
 def validate_graph_generically(core, graph, selectable_nodes):
+    """Executa validações independentes de uma rota específica."""
+
     if not selectable_nodes:
         raise AssertionError("Não há nós selecionáveis.")
 
@@ -404,6 +450,13 @@ def validate_graph_generically(core, graph, selectable_nodes):
 
 
 def validate_profile_route_matrix(core, graph, selectable_nodes, mobility_reduced: bool):
+    """Testa rotas entre pontos selecionáveis de um perfil.
+
+    Em vez de validar só meia dúzia de caminhos, percorro a matriz de
+    origem/destino possível. Isto ajuda a descobrir rapidamente zonas isoladas
+    ou arestas proibidas que entraram por engano.
+    """
+
     candidates = profile_candidate_nodes(core, selectable_nodes, mobility_reduced)
     profile = PROFILE_NAMES[mobility_reduced]
     tested_routes = 0
@@ -448,7 +501,7 @@ def validate_profile_route_matrix(core, graph, selectable_nodes, mobility_reduce
 
 
 def validate_profile_endpoint_guards(core, graph, selectable_nodes):
-    """Garante que o Dijkstra recusa endpoints que o perfil nao pode escolher."""
+    """Garante que o Dijkstra recusa endpoints que o perfil não pode escolher."""
 
     for mobility_reduced in (False, True):
         valid_nodes = core.filter_selectable_nodes_for_profile(selectable_nodes, mobility_reduced)
@@ -494,6 +547,8 @@ def validate_profile_endpoint_guards(core, graph, selectable_nodes):
 
 
 def run_case(core, graph, selectable_nodes, case: RouteCase, check_instructions: bool = True):
+    """Executa um caso de rota manual e valida os requisitos associados."""
+
     origin = find_node(core, selectable_nodes, case.origin_building, case.origin_floor, case.origin_label)
     destination = find_node(
         core,
@@ -543,6 +598,8 @@ def run_case(core, graph, selectable_nodes, case: RouteCase, check_instructions:
 
 
 def run_dataset(name: str, core):
+    """Corre todos os testes sobre um core específico: desktop ou mobile."""
+
     graph, _floors = core.build_campus_graph()
     selectable_nodes = core.collect_selectable_nodes(graph)
 
@@ -578,6 +635,8 @@ def run_dataset(name: str, core):
 
 
 def main():
+    """Ponto de entrada: compara desktop e mobile na mesma execução."""
+
     run_dataset("desktop", load_desktop_core())
     run_dataset("mobile", load_mobile_core())
     print("\nTodos os testes genéricos e de regressão passaram.")

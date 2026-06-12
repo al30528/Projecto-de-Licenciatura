@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-Core autonomo da app movel de navegacao pedestre indoor.
+Core autonomo da app desktop de navegacao pedestre indoor.
 
 Este modulo concentra a leitura dos ficheiros OSM, a construcao do grafo do
 campus, as regras de mobilidade, o calculo de rotas com Dijkstra e a geracao de
-instrucoes textuais. Mantive uma copia propria dentro de `app movel/` para a
-app Android nao depender da pasta `App Desktop/`.
+instrucoes textuais. Mantive uma copia propria dentro de `App Desktop/` para a
+app desktop nao depender da pasta da app movel.
 """
 
 from __future__ import annotations
@@ -17,8 +17,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-# Caminhos por defeito da app movel. Os OSM e imagens usados no APK ficam
-# dentro desta mesma pasta para o Buildozer os empacotar.
+# Caminhos por defeito da app desktop. Como este ficheiro esta dentro de
+# `App Desktop/`, os OSM e as imagens devem ficar nesta mesma pasta.
 BASE_DIR = Path(__file__).resolve().parent
 OSM_DIR = BASE_DIR / "OSM Pisos"
 IMAGE_DIR = BASE_DIR / "Imagens ECT2"
@@ -68,8 +68,9 @@ def configure_paths(base_dir: Path | str):
     """
     Atualiza os caminhos do core sem duplicar a logica.
 
-    Por defeito o core usa a pasta `app movel`. Esta funcao continua a existir
-    para testes e validadores poderem apontar explicitamente para este dataset.
+    Por defeito o core usa a pasta `App Desktop`. Esta funcao continua a existir
+    para os scripts de validacao/testes poderem apontar explicitamente para este
+    dataset sem depender do diretorio atual.
     """
 
     global BASE_DIR, OSM_DIR, IMAGE_DIR, OSM_FILES, FLOOR_IMAGES
@@ -168,10 +169,10 @@ class SimpleGraph:
     """
     Grafo nao dirigido minimo usado pelo core da app.
 
-    Comecei por usar NetworkX, mas no APK essa biblioteca trouxe uma dependencia
-    nativa (`_bz2`) indisponivel. Por isso optei por implementar so as operacoes
-    necessarias: adicionar nos/arestas, iterar nos/arestas,
-    consultar vizinhos e aceder a `graph[a][b]`.
+    Comecei por usar NetworkX, mas para manter o core leve e facil de
+    duplicar entre apps optei por implementar so as operacoes necessarias:
+    adicionar nos/arestas, iterar nos/arestas, consultar vizinhos e aceder a
+    `graph[a][b]`.
     """
 
     def __init__(self):
