@@ -1,11 +1,18 @@
 # -*- coding: utf-8 -*-
-"""Protótipo Android em Kivy para navegação pedestre indoor na UTAD."""
+"""Protótipo Android em Kivy para navegação pedestre indoor na UTAD.
+
+Este ficheiro fica responsável pela interface móvel. A lógica de dados,
+OSM, Dijkstra, acessibilidade e instruções está concentrada no
+``navigation_core.py`` desta pasta. A app desktop tem a sua própria cópia para
+as duas apps não dependerem uma da outra.
+"""
 
 from __future__ import annotations
 
 import urllib.error
 import urllib.request
 import ssl
+from math import hypot
 from pathlib import Path
 
 from kivy.app import App
@@ -48,7 +55,13 @@ class Surface(BoxLayout):
 
 
 class GraphMapWidget(StencilView):
-    """Canvas simples para ver o grafo e a rota no ecrã móvel."""
+    """Canvas de mapa usado tanto no planeamento como na navegação móvel.
+
+    O widget desenha imagens calibradas, tiles OpenStreetMap, grafo e rota no
+    mesmo sistema de coordenadas Web Mercator. O ``StencilView`` é importante
+    porque impede que linhas e pontos do grafo fiquem desenhados por cima dos
+    controlos quando há zoom ou arrasto.
+    """
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -61,14 +74,24 @@ class GraphMapWidget(StencilView):
         self.visible_floor = "Exterior"
         self.show_labels = False
         self.map_zoom = 1.0
+        # Guardo o centro em coordenadas de mundo para o zoom e o arrasto serem
+        # independentes do tamanho do ecrã do telemóvel.
         self.map_center = None
         self.map_center_floor = None
         self._route_focus_key = None
         self._drag_touch_id = None
         self._drag_start = None
         self._drag_start_center = None
+        # Guardo os toques ativos para distinguir arrasto com um dedo de pinch
+        # com dois dedos. Isto evita depender de gestos específicos do sistema.
+        self._active_touches = {}
+        self._pinch_touch_ids = None
+        self._pinch_start_distance = None
+        self._pinch_start_zoom = None
         self._last_world_scale = 1.0
         self._last_view_center = None
+        # As imagens e os tiles são mantidos em cache para evitar releituras
+        # constantes no Android, onde o armazenamento é mais lento.
         self._texture_cache = {}
         self._image_cache = {}
         self.tile_cache_dir = nav.BASE_DIR / ".tile_cache" / "osm_carto_android"
@@ -95,6 +118,8 @@ class GraphMapWidget(StencilView):
 
         focus_key = self._current_route_focus_key()
         if focus_key is not None and focus_key != self._route_focus_key:
+            # Só recentro automaticamente quando a rota avança para outro ponto;
+            # se o utilizador arrastar o mapa, não quero roubar esse controlo.
             self.center_on_current_route(redraw=False)
         self._route_focus_key = focus_key
         self.redraw()
@@ -129,14 +154,60 @@ class GraphMapWidget(StencilView):
     def _change_zoom(self, multiplier):
         """Atualiza o fator de zoom e redesenha o mapa."""
 
-        if self.map_center is None or self.map_center_floor != self.visible_floor:
-            self.map_center = self._last_view_center
-            self.map_center_floor = self.visible_floor if self.map_center else None
-            if self.map_center is None:
-                self.center_on_current_route(redraw=False)
-
+        self._ensure_zoom_center()
         self.map_zoom = max(0.6, min(8.0, self.map_zoom * multiplier))
         self.redraw()
+
+    def _ensure_zoom_center(self):
+        """Garante que há um centro de mapa válido antes de aplicar zoom."""
+
+        if self.map_center is not None and self.map_center_floor == self.visible_floor:
+            return
+
+        # Quando faço zoom antes de haver uma rota, parto do último centro
+        # visível. Isto evita saltos estranhos no mapa.
+        self.map_center = self._last_view_center
+        self.map_center_floor = self.visible_floor if self.map_center else None
+        if self.map_center is None:
+            self.center_on_current_route(redraw=False)
+
+    def _touch_distance(self, first_uid, second_uid):
+        """Calcula a distância em píxeis entre dois toques ativos."""
+
+        first = self._active_touches.get(first_uid)
+        second = self._active_touches.get(second_uid)
+        if first is None or second is None:
+            return None
+        return hypot(second[0] - first[0], second[1] - first[1])
+
+    def _start_pinch(self):
+        """Ativa o zoom por dois dedos usando o centro atual da vista."""
+
+        if len(self._active_touches) < 2:
+            return False
+
+        first_uid, second_uid = list(self._active_touches.keys())[:2]
+        distance = self._touch_distance(first_uid, second_uid)
+        if distance is None or distance < 8:
+            return False
+
+        # O pinch usa o centro atual da janela como referência. Assim o mapa
+        # aproxima/afasta sem saltar para a posição média dos dedos.
+        self._ensure_zoom_center()
+        self._pinch_touch_ids = (first_uid, second_uid)
+        self._pinch_start_distance = distance
+        self._pinch_start_zoom = self.map_zoom
+        self._drag_touch_id = None
+        self._drag_start = None
+        self._drag_start_center = None
+        return True
+
+    def _reset_pinch(self):
+        """Sai do modo pinch quando um dos dedos deixa o mapa."""
+
+        self._pinch_touch_ids = None
+        self._pinch_start_distance = None
+        self._pinch_start_zoom = None
 
     def _current_route_focus_key(self):
         """Identifica o ponto atual para recentrar apenas quando a navegação avança."""
@@ -255,6 +326,9 @@ class GraphMapWidget(StencilView):
         usable_width = max(self.width - margin * 2, 1)
         usable_height = max(self.height - margin * 2, 1)
         target_ratio = usable_width / usable_height
+        # Ajusto a caixa do mundo ao rácio do widget para o mapa não ficar
+        # deformado. O zoom aumenta a escala, e o centro define que zona fica
+        # visível dentro da mesma janela.
         view_width = range_x
         view_height = range_y
         current_ratio = view_width / view_height if view_height else target_ratio
@@ -289,6 +363,11 @@ class GraphMapWidget(StencilView):
 
         if not self.collide_point(*touch.pos):
             return super().on_touch_down(touch)
+        self._active_touches[touch.uid] = touch.pos
+        if self._pinch_touch_ids is not None:
+            return True
+        if len(self._active_touches) >= 2 and self._start_pinch():
+            return True
         if self._drag_touch_id is not None:
             return super().on_touch_down(touch)
 
@@ -301,10 +380,32 @@ class GraphMapWidget(StencilView):
     def on_touch_move(self, touch):
         """Desloca a vista do mapa enquanto o dedo/mouse é arrastado."""
 
+        if touch.uid in self._active_touches:
+            self._active_touches[touch.uid] = touch.pos
+
+        if self._pinch_touch_ids is not None and touch.uid in self._pinch_touch_ids:
+            distance = self._touch_distance(*self._pinch_touch_ids)
+            if (
+                distance is None
+                or self._pinch_start_distance is None
+                or self._pinch_start_zoom is None
+            ):
+                return True
+
+            # A escala do pinch é simplesmente a variação da distância entre os
+            # dedos desde o início do gesto.
+            ratio = distance / max(self._pinch_start_distance, 1)
+            self.map_zoom = max(0.6, min(8.0, self._pinch_start_zoom * ratio))
+            self.map_center_floor = self.visible_floor
+            self.redraw()
+            return True
+
         if touch.uid != self._drag_touch_id or self._drag_start_center is None:
             return super().on_touch_move(touch)
 
         scale = max(self._last_world_scale, 0.000001)
+        # Arrastar para a direita deve revelar o conteúdo que estava à esquerda;
+        # por isso o centro do mundo move-se no sentido oposto ao gesto.
         delta_x = (touch.x - self._drag_start[0]) / scale
         delta_y = (touch.y - self._drag_start[1]) / scale
         self.map_center = (
@@ -317,6 +418,11 @@ class GraphMapWidget(StencilView):
 
     def on_touch_up(self, touch):
         """Termina o arrasto atual do mapa."""
+
+        self._active_touches.pop(touch.uid, None)
+        if self._pinch_touch_ids is not None and touch.uid in self._pinch_touch_ids:
+            self._reset_pinch()
+            return True
 
         if touch.uid != self._drag_touch_id:
             return super().on_touch_up(touch)
@@ -336,7 +442,12 @@ class GraphMapWidget(StencilView):
         )
 
     def _clip_segment_to_map(self, start, end):
-        """Corta uma linha ao retângulo do mapa para impedir desenho fora da caixa."""
+        """Corta uma linha ao retângulo do mapa para impedir desenho fora da caixa.
+
+        Uso uma forma simples do algoritmo de Liang-Barsky para desenhar apenas
+        o troço visível de cada aresta. Isto foi necessário para resolver o
+        clipping dos pontos/linhas por cima das dropdowns no ecrã móvel.
+        """
 
         min_x, min_y = self.x, self.y
         max_x, max_y = self.right, self.top
@@ -385,6 +496,8 @@ class GraphMapWidget(StencilView):
         # `texture.tex_coords` respeita eventuais inversões internas feitas pelo
         # loader Kivy. A ordem dos cantos do world file é:
         # top-left, top-right, bottom-right, bottom-left.
+        # Uso Mesh, e não Rectangle, porque as imagens calibradas podem estar
+        # rodadas em relação ao ecrã.
         tex = texture.tex_coords
         tex_coords = [
             (tex[6], tex[7]),
@@ -454,6 +567,8 @@ class GraphMapWidget(StencilView):
             if texture is None:
                 continue
 
+            # Cada tile é desenhado no seu retângulo real Web Mercator. O grafo
+            # exterior usa o mesmo sistema, por isso as linhas ficam alinhadas.
             min_x, max_x, min_y, max_y = extent
             left, bottom = world_to_screen((min_x, min_y))
             right, top = world_to_screen((max_x, max_y))
@@ -480,7 +595,7 @@ class GraphMapWidget(StencilView):
         try:
             # Em alguns builds Android, o Python consegue usar SSL mas não
             # encontra a store de certificados do sistema. Para o protótipo,
-            # aceitamos a tile HTTPS sem validação para não perder o fundo OSM.
+            # aceito a tile HTTPS sem validação para não perder o fundo OSM.
             context = ssl._create_unverified_context() if url.startswith("https://") else None
             with urllib.request.urlopen(request, timeout=8, context=context) as response:
                 tile_path.write_bytes(response.read())
@@ -634,306 +749,13 @@ class GraphMapWidget(StencilView):
             Rectangle(texture=texture, pos=(x_value, y_value), size=texture.size)
 
 
-class _LegacyAndroidNavigationApp(App):
-    """Primeira versão da app num único ecrã, mantida como referência."""
-
-    title = "Navegação UTAD"
-
-    def build(self):
-        """Monta a interface antiga: controlos, mapa, instruções e botões."""
-
-        self.graph = None
-        self.floor_graphs = {}
-        self.selectable_nodes = []
-        self.route = None
-        self._refreshing_options = False
-
-        root = BoxLayout(orientation="vertical", spacing=dp(8), padding=dp(8))
-
-        title = Label(
-            text="Navegação Pedestre UTAD",
-            bold=True,
-            font_size=sp(20),
-            size_hint_y=None,
-            height=dp(34),
-        )
-        root.add_widget(title)
-
-        root.add_widget(self._build_controls())
-
-        self.map_widget = GraphMapWidget(size_hint_y=1)
-        self.map_widget.tile_cache_dir = Path(self.user_data_dir) / "osm_carto_tiles"
-        root.add_widget(self.map_widget)
-
-        instruction_panel = Surface(
-            orientation="vertical",
-            background="#F7F8FA",
-            size_hint_y=None,
-            height=dp(150),
-            padding=dp(10),
-        )
-        self.navigation_label = Label(
-            text="A carregar mapas...",
-            color=get_color_from_hex("#111111"),
-            halign="left",
-            valign="top",
-            size_hint_y=None,
-            height=dp(132),
-        )
-        self.navigation_label.bind(
-            size=lambda instance, value: setattr(instance, "text_size", value),
-        )
-        instruction_panel.add_widget(self.navigation_label)
-        root.add_widget(instruction_panel)
-
-        buttons = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(8))
-        buttons.add_widget(Button(text="Calcular rota", on_release=lambda *_: self.calculate_route()))
-        buttons.add_widget(Button(text="Confirmar chegada", on_release=lambda *_: self.confirm_arrival()))
-        root.add_widget(buttons)
-
-        Clock.schedule_once(lambda *_: self.load_campus(), 0)
-        return root
-
-    def _build_controls(self):
-        """Cria os controlos antigos de perfil, origem, destino e piso visível."""
-
-        scroll = ScrollView(size_hint_y=None, height=dp(284), do_scroll_x=False)
-        grid = GridLayout(cols=2, spacing=dp(6), size_hint_y=None)
-        grid.bind(minimum_height=grid.setter("height"))
-        scroll.add_widget(grid)
-
-        self.profile_spinner = self._add_spinner(
-            grid,
-            "Perfil",
-            ["Normal", "Mobilidade reduzida"],
-            "Normal",
-        )
-        self.origin_building_spinner = self._add_spinner(grid, "Edifício origem", [], "")
-        self.origin_floor_spinner = self._add_spinner(grid, "Piso origem", [], "")
-        self.origin_spinner = self._add_spinner(grid, "Origem", [], "")
-        self.destination_building_spinner = self._add_spinner(grid, "Edifício destino", [], "")
-        self.destination_floor_spinner = self._add_spinner(grid, "Piso destino", [], "")
-        self.destination_spinner = self._add_spinner(grid, "Destino", [], "")
-        self.visible_floor_spinner = self._add_spinner(grid, "Mapa visível", nav.APP_FLOORS, "Exterior")
-
-        grid.add_widget(Label(text="Mostrar labels", halign="left", size_hint_y=None, height=dp(38)))
-        self.show_labels_checkbox = CheckBox(size_hint_y=None, height=dp(38))
-        grid.add_widget(self.show_labels_checkbox)
-
-        for spinner in [
-            self.origin_building_spinner,
-            self.origin_floor_spinner,
-            self.origin_spinner,
-            self.destination_building_spinner,
-            self.destination_floor_spinner,
-            self.destination_spinner,
-            self.visible_floor_spinner,
-        ]:
-            spinner.bind(text=lambda *_: self.on_selection_changed())
-        self.show_labels_checkbox.bind(active=lambda *_: self.refresh_map())
-
-        return scroll
-
-    def _add_spinner(self, parent, label_text, values, text):
-        """Adiciona uma label e uma Spinner ao layout indicado."""
-
-        parent.add_widget(Label(text=label_text, halign="left", size_hint_y=None, height=dp(38)))
-        spinner = Spinner(
-            text=text or "-",
-            values=values,
-            size_hint_y=None,
-            height=dp(38),
-        )
-        parent.add_widget(spinner)
-        return spinner
-
-    def _fit_label_height(self, instance, texture_size):
-        """Ajusta a altura de uma label ao texto que ela contém."""
-
-        instance.height = max(dp(112), texture_size[1] + dp(18))
-
-    def load_campus(self):
-        """Carrega os grafos OSM e prepara as listas de pontos selecionáveis."""
-
-        try:
-            self.graph, self.floor_graphs = nav.build_campus_graph()
-            self.selectable_nodes = nav.collect_selectable_nodes(self.graph)
-        except Exception as error:
-            self.navigation_label.text = f"Erro ao carregar mapas:\n{error}"
-            return
-
-        self.route = None
-        self.refresh_option_lists(force_defaults=True)
-        self.navigation_label.text = "Escolhe a origem e o destino para começar."
-        self.refresh_map()
-
-    def on_selection_changed(self):
-        """Reage a alterações nas spinners e atualiza listas/mapa."""
-
-        if self._refreshing_options:
-            return
-        if not self.selectable_nodes:
-            return
-        self.refresh_option_lists(force_defaults=False)
-        if self.route is None and self.origin_floor_spinner.text in nav.APP_FLOORS:
-            self._set_spinner_text_silently(self.visible_floor_spinner, self.origin_floor_spinner.text)
-        self.refresh_map()
-
-    def refresh_option_lists(self, force_defaults=False):
-        """Atualiza edifícios, pisos e pontos disponíveis nos controlos antigos."""
-
-        self._refreshing_options = True
-        try:
-            buildings = nav.available_buildings(self.selectable_nodes)
-            self._set_spinner_values(
-                self.origin_building_spinner,
-                buildings,
-                "ECT2" if "ECT2" in buildings else None,
-                force_defaults,
-            )
-            self._set_spinner_values(
-                self.destination_building_spinner,
-                buildings,
-                "ECT2" if "ECT2" in buildings else None,
-                force_defaults,
-            )
-
-            self._refresh_floor_spinner(self.origin_building_spinner, self.origin_floor_spinner, force_defaults)
-            self._refresh_floor_spinner(
-                self.destination_building_spinner,
-                self.destination_floor_spinner,
-                force_defaults,
-            )
-            self._refresh_node_spinner(
-                self.origin_building_spinner,
-                self.origin_floor_spinner,
-                self.origin_spinner,
-                force_defaults,
-                choose_last=False,
-            )
-            self._refresh_node_spinner(
-                self.destination_building_spinner,
-                self.destination_floor_spinner,
-                self.destination_spinner,
-                force_defaults,
-                choose_last=True,
-            )
-        finally:
-            self._refreshing_options = False
-
-    def _refresh_floor_spinner(self, building_spinner, floor_spinner, force_defaults):
-        """Mostra apenas pisos existentes para o edifício selecionado."""
-
-        floors = nav.available_floors(self.selectable_nodes, building_spinner.text)
-        floor_spinner.disabled = len(floors) <= 1
-        default = "Piso1" if "Piso1" in floors else (floors[0] if floors else None)
-        self._set_spinner_values(floor_spinner, floors, default, force_defaults)
-
-    def _refresh_node_spinner(
-        self,
-        building_spinner,
-        floor_spinner,
-        node_spinner,
-        force_defaults,
-        choose_last,
-    ):
-        """Mostra apenas salas/entradas existentes no edifício e piso escolhidos."""
-
-        nodes = nav.nodes_for(self.selectable_nodes, building_spinner.text, floor_spinner.text)
-        labels = [node.label for node in nodes]
-        default = labels[-1] if choose_last and labels else labels[0] if labels else None
-        self._set_spinner_values(node_spinner, labels, default, force_defaults)
-
-    def _set_spinner_values(self, spinner, values, default=None, force_defaults=False):
-        """Define opções de uma Spinner e escolhe um valor válido."""
-
-        spinner.values = values
-        if not values:
-            spinner.text = "-"
-            return
-        if force_defaults or spinner.text not in values:
-            spinner.text = default if default in values else values[0]
-
-    def _set_spinner_text_silently(self, spinner, value):
-        """Altera uma Spinner sem disparar uma cascata de atualizações."""
-
-        self._refreshing_options = True
-        try:
-            spinner.text = value
-        finally:
-            self._refreshing_options = False
-
-    def calculate_route(self):
-        """Calcula rota na versão antiga e mostra a primeira instrução."""
-
-        if self.graph is None:
-            self.navigation_label.text = "Os mapas ainda não foram carregados."
-            return
-
-        origin = nav.find_selectable_node(
-            self.selectable_nodes,
-            self.origin_spinner.text,
-            self.origin_building_spinner.text,
-            self.origin_floor_spinner.text,
-        )
-        destination = nav.find_selectable_node(
-            self.selectable_nodes,
-            self.destination_spinner.text,
-            self.destination_building_spinner.text,
-            self.destination_floor_spinner.text,
-        )
-        if origin is None or destination is None:
-            self.navigation_label.text = "Escolhe uma origem e um destino válidos."
-            return
-
-        path, distance = nav.calculate_path(
-            self.graph,
-            origin,
-            destination,
-            mobility_reduced=self.profile_spinner.text == "Mobilidade reduzida",
-        )
-        if not path:
-            self.route = None
-            self.navigation_label.text = "Não foi possível encontrar uma rota para essas opções."
-            self.refresh_map()
-            return
-
-        self.route = nav.RouteState(graph=self.graph, path=path, distance=distance)
-        self.visible_floor_spinner.text = self.graph.nodes[path[0]].get("floor_key", self.visible_floor_spinner.text)
-        self.navigation_label.text = nav.navigation_instruction(self.graph, self.route)
-        self.refresh_map()
-
-    def confirm_arrival(self):
-        """Avança para o próximo ponto da rota na versão antiga."""
-
-        if self.route is None:
-            self.navigation_label.text = "Calcula primeiro uma rota."
-            return
-        if self.route.current_index >= len(self.route.path) - 1:
-            self.navigation_label.text = "Chegaste ao destino."
-            return
-
-        self.route.current_index = nav.next_navigation_index(self.graph, self.route)
-        current = self.route.path[self.route.current_index]
-        self.visible_floor_spinner.text = self.graph.nodes[current].get("floor_key", self.visible_floor_spinner.text)
-        self.navigation_label.text = nav.navigation_instruction(self.graph, self.route)
-        self.refresh_map()
-
-    def refresh_map(self):
-        """Atualiza o GraphMapWidget da interface antiga."""
-
-        if not hasattr(self, "map_widget"):
-            return
-        self.map_widget.set_state(
-            self.graph,
-            self.visible_floor_spinner.text,
-            self.route,
-            self.show_labels_checkbox.active,
-        )
-
-
 class AndroidNavigationApp(App):
-    """Aplicação Android atual com ecrã de perfil, planeamento e navegação."""
+    """Aplicação Android atual com ecrã de perfil, planeamento e navegação.
+
+    Mantive três ecrãs separados para ficar próximo do fluxo esperado numa app
+    móvel: primeiro o perfil, depois a escolha de locais, e por fim a navegação
+    passo a passo.
+    """
 
     title = "Navegação UTAD"
 
@@ -952,6 +774,8 @@ class AndroidNavigationApp(App):
         self.screen_manager.add_widget(self._build_planner_screen())
         self.screen_manager.add_widget(self._build_navigation_screen())
 
+        # Carrego o campus depois de criar os widgets para poder mostrar erros
+        # diretamente nas labels da interface se algum ficheiro OSM/imagem falhar.
         Clock.schedule_once(lambda *_: self.load_campus(), 0)
         return self.screen_manager
 
@@ -1138,6 +962,8 @@ class AndroidNavigationApp(App):
     def _build_location_controls(self):
         """Cria os controlos de edifício, piso, sala/entrada e mapa visível."""
 
+        # No telemóvel os controlos precisam de ficar compactos. Uso um
+        # ScrollView para continuar acessível em ecrãs mais pequenos.
         scroll = ScrollView(size_hint_y=None, height=dp(250), do_scroll_x=False)
         grid = GridLayout(cols=2, spacing=dp(6), size_hint_y=None)
         grid.bind(minimum_height=grid.setter("height"))
@@ -1210,6 +1036,7 @@ class AndroidNavigationApp(App):
 
         self.profile = profile
         self._sync_profile_labels()
+        self.refresh_option_lists(force_defaults=False)
         self.screen_manager.current = "planner"
         self.refresh_maps()
 
@@ -1237,12 +1064,26 @@ class AndroidNavigationApp(App):
             self._set_spinner_text_silently(self.visible_floor_spinner, self.origin_floor_spinner.text)
         self.refresh_maps()
 
+    def _profile_selectable_nodes(self):
+        """Devolve apenas os pontos adequados ao perfil escolhido."""
+
+        if self.profile is None:
+            return self.selectable_nodes
+        return nav.filter_selectable_nodes_for_profile(
+            self.selectable_nodes,
+            self.profile == "Mobilidade reduzida",
+        )
+
     def refresh_option_lists(self, force_defaults=False):
         """Reconstrói as opções das spinners com base no estado atual."""
 
         self._refreshing_options = True
         try:
-            buildings = nav.available_buildings(self.selectable_nodes)
+            selectable_nodes = self._profile_selectable_nodes()
+            buildings = nav.available_buildings(selectable_nodes)
+            # A ordem importa: primeiro edifício, depois piso, e só no fim os
+            # pontos. Assim evito uma seleção de sala que já não pertence ao
+            # edifício/piso visível.
             self._set_spinner_values(
                 self.origin_building_spinner,
                 buildings,
@@ -1256,13 +1097,20 @@ class AndroidNavigationApp(App):
                 force_defaults,
             )
 
-            self._refresh_floor_spinner(self.origin_building_spinner, self.origin_floor_spinner, force_defaults)
             self._refresh_floor_spinner(
+                selectable_nodes,
+                self.origin_building_spinner,
+                self.origin_floor_spinner,
+                force_defaults,
+            )
+            self._refresh_floor_spinner(
+                selectable_nodes,
                 self.destination_building_spinner,
                 self.destination_floor_spinner,
                 force_defaults,
             )
             self._refresh_node_spinner(
+                selectable_nodes,
                 self.origin_building_spinner,
                 self.origin_floor_spinner,
                 self.origin_spinner,
@@ -1270,6 +1118,7 @@ class AndroidNavigationApp(App):
                 choose_last=False,
             )
             self._refresh_node_spinner(
+                selectable_nodes,
                 self.destination_building_spinner,
                 self.destination_floor_spinner,
                 self.destination_spinner,
@@ -1279,16 +1128,17 @@ class AndroidNavigationApp(App):
         finally:
             self._refreshing_options = False
 
-    def _refresh_floor_spinner(self, building_spinner, floor_spinner, force_defaults):
+    def _refresh_floor_spinner(self, selectable_nodes, building_spinner, floor_spinner, force_defaults):
         """Atualiza a lista de pisos disponíveis para um edifício."""
 
-        floors = nav.available_floors(self.selectable_nodes, building_spinner.text)
+        floors = nav.available_floors(selectable_nodes, building_spinner.text)
         floor_spinner.disabled = len(floors) <= 1
         default = "Piso1" if "Piso1" in floors else (floors[0] if floors else None)
         self._set_spinner_values(floor_spinner, floors, default, force_defaults)
 
     def _refresh_node_spinner(
         self,
+        selectable_nodes,
         building_spinner,
         floor_spinner,
         node_spinner,
@@ -1297,7 +1147,7 @@ class AndroidNavigationApp(App):
     ):
         """Atualiza a lista de salas/entradas para edifício e piso selecionados."""
 
-        nodes = nav.nodes_for(self.selectable_nodes, building_spinner.text, floor_spinner.text)
+        nodes = nav.nodes_for(selectable_nodes, building_spinner.text, floor_spinner.text)
         labels = [node.label for node in nodes]
         default = labels[-1] if choose_last and labels else labels[0] if labels else None
         self._set_spinner_values(node_spinner, labels, default, force_defaults)
@@ -1348,11 +1198,21 @@ class AndroidNavigationApp(App):
             self.planner_status_label.text = "Escolhe uma origem e um destino válidos."
             return
 
+        # Mesmo que a interface filtre as opções, volto a validar aqui. Se uma
+        # Spinner ficar num estado antigo por bug, a rota não deve violar o perfil.
+        mobility_reduced = self.profile == "Mobilidade reduzida"
+        if not nav.graph_node_allowed_for_profile(self.graph, origin, mobility_reduced):
+            self.planner_status_label.text = "A origem escolhida não é adequada ao perfil selecionado."
+            return
+        if not nav.graph_node_allowed_for_profile(self.graph, destination, mobility_reduced):
+            self.planner_status_label.text = "O destino escolhido não é adequado ao perfil selecionado."
+            return
+
         path, distance = nav.calculate_path(
             self.graph,
             origin,
             destination,
-            mobility_reduced=self.profile == "Mobilidade reduzida",
+            mobility_reduced=mobility_reduced,
         )
         if not path:
             self.route = None
@@ -1404,6 +1264,8 @@ class AndroidNavigationApp(App):
 
         show_labels = self.show_labels_checkbox.active if hasattr(self, "show_labels_checkbox") else False
         visible_floor = self.visible_floor_spinner.text if hasattr(self, "visible_floor_spinner") else "Exterior"
+        # O mapa de planeamento mostra só contexto; o mapa de navegação recebe
+        # a rota para destacar progresso e ponto atual.
         if hasattr(self, "planner_map_widget"):
             self.planner_map_widget.set_state(
                 self.graph,

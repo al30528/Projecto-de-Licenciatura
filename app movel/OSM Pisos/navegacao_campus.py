@@ -104,6 +104,26 @@ def haversine(lat1, lon1, lat2, lon2):
 # 3. CONSTRUÇÃO DO GRAFO
 # =============================================================================
 
+def segment_edge_type(way_edge_type, node_a, node_b):
+    edge_type = (way_edge_type or 'connection').strip() or 'connection'
+    endpoint_types = {str(node_a.get('type', '')).lower(), str(node_b.get('type', '')).lower()}
+
+    if edge_type == 'stairs':
+        return 'stairs'
+    if edge_type == 'elevator' and 'elevator' not in endpoint_types:
+        return 'connection'
+    if edge_type == 'ramp' and endpoint_types.isdisjoint({'ramp', 'rampa'}):
+        return 'connection'
+    if edge_type == 'crosswalk':
+        if 'sidewalk' in endpoint_types:
+            return 'sidewalk'
+        if 'crosswalk' not in endpoint_types:
+            return 'connection'
+    if edge_type == 'sidewalk' and 'sidewalk' not in endpoint_types:
+        return 'connection'
+    return edge_type
+
+
 def build_graph(nodes, edges):
     """
     Constrói um grafo NetworkX a partir dos nós e arestas do OSM.
@@ -120,14 +140,9 @@ def build_graph(nodes, edges):
             **data['tags']
         )
     
-    # Adicionar arestas com peso = distância.
-    # Cada ligação entre dois nós consecutivos do OSM recebe um `weight`.
-    # O Dijkstra soma estes pesos e escolhe a rota com menor custo total.
+    # Adicionar arestas com peso = distância
     for n1, n2, way_id, way_tags in edges:
         if n1 in nodes and n2 in nodes:
-            # Haversine calcula a distância aproximada em metros a partir de
-            # latitude/longitude. É esta distância que depois aparece como
-            # metros nas instruções da aplicação.
             dist = haversine(
                 nodes[n1]['lat'], nodes[n1]['lon'],
                 nodes[n2]['lat'], nodes[n2]['lon']
@@ -135,13 +150,15 @@ def build_graph(nodes, edges):
             
             # Extrair acessibilidade da aresta (default = 5, totalmente acessível)
             accessibility = int(way_tags.get('accessibility', 5))
-            edge_type = way_tags.get('type', 'connection')
+            edge_type = segment_edge_type(
+                way_tags.get('edge_type', 'connection'),
+                nodes[n1]['tags'],
+                nodes[n2]['tags'],
+            )
             
             G.add_edge(
                 n1, n2,
-                # Usado pelo Dijkstra para comparar caminhos.
                 weight=dist,
-                # Usado para mostrar a distância arredondada ao utilizador.
                 length=round(dist, 2),
                 way_id=way_id,
                 edge_type=edge_type,
@@ -170,9 +187,6 @@ def dijkstra(graph, start, end, accessibility_min=1):
     Retorna:
         path: lista de nós do caminho
         distance: distância total em metros
-
-    A app móvel usa sobretudo o Dijkstra do NetworkX em `navigation_core.py`,
-    mas esta versão manual ajuda a perceber a execução passo a passo.
     """
     # Verificar se os nós existem
     if start not in graph.nodes:
@@ -182,23 +196,14 @@ def dijkstra(graph, start, end, accessibility_min=1):
         print(f"ERRO: Nó de destino '{end}' não existe no grafo.")
         return None, float('inf')
     
-    # Inicialização: todos os nós começam com distância infinita, exceto a
-    # origem, que começa a zero porque ainda não houve deslocação.
+    # Inicialização
     distances = {node: float('inf') for node in graph.nodes}
     distances[start] = 0
-
-    # Guarda o nó anterior no melhor caminho conhecido. No fim permite
-    # reconstruir a rota desde o destino até à origem.
     previous = {node: None for node in graph.nodes}
-
-    # Fila de prioridade: o heap retira sempre o nó com menor distância
-    # acumulada. Cada item tem a forma (distância_atual, node_id).
     priority_queue = [(0, start)]
     visited = set()
     
     while priority_queue:
-        # Escolhe o nó mais promissor, isto é, o ainda não processado com menor
-        # distância acumulada desde a origem.
         current_dist, current_node = heapq.heappop(priority_queue)
         
         if current_node in visited:
@@ -218,9 +223,6 @@ def dijkstra(graph, start, end, accessibility_min=1):
             if edge_data.get('accessibility', 5) < accessibility_min:
                 continue
             
-            # O peso da aresta é normalmente a distância em metros.
-            # Se passar por este vizinho melhorar o caminho conhecido,
-            # atualizamos a distância e guardamos de onde viemos.
             weight = edge_data['weight']
             new_dist = current_dist + weight
             
@@ -234,8 +236,6 @@ def dijkstra(graph, start, end, accessibility_min=1):
         print("Não foi possível encontrar um caminho.")
         return None, float('inf')
     
-    # Começamos no destino e seguimos os nós anteriores até chegar à origem.
-    # Depois invertemos para apresentar origem -> destino.
     path = []
     node = end
     while node is not None:
