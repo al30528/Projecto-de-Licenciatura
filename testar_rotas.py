@@ -316,6 +316,7 @@ def assert_route_instruction_sequence(core, graph, path, distance, context: str)
         if "none" in instruction or "nan" in instruction:
             raise AssertionError(f"{context}: instrução inválida no passo {index + 1}:\n{instruction}")
         assert_vertical_instruction_semantics(core, graph, route, index, instruction, context)
+        assert_elevator_exit_instruction_semantics(graph, route, index, instruction, context)
 
 
 def assert_vertical_instruction_semantics(core, graph, route, index: int, instruction: str, context: str):
@@ -354,6 +355,30 @@ def assert_vertical_instruction_semantics(core, graph, route, index: int, instru
         raise AssertionError(f"{context}: transição por escadas sem mencionar escadas no passo {index + 1}:\n{instruction}")
     if edge_type == "elevator" and "elevador" not in instruction:
         raise AssertionError(f"{context}: transição por elevador sem mencionar elevador no passo {index + 1}:\n{instruction}")
+
+
+def assert_elevator_exit_instruction_semantics(graph, route, index: int, instruction: str, context: str):
+    """Protege o passo imediatamente depois de uma transicao por elevador."""
+
+    if index <= 0:
+        return
+
+    path = route.path
+    previous_edge = graph[path[index - 1]][path[index]]
+    current_edge = graph[path[index]][path[index + 1]]
+    current_type = str(graph.nodes[path[index]].get("type", "")).lower()
+
+    if previous_edge.get("edge_type") != "elevator":
+        return
+    if current_type != "elevator" or current_edge.get("vertical"):
+        return
+
+    if "sai do elevador" not in instruction:
+        raise AssertionError(f"{context}: saída do elevador sem instrução explícita no passo {index + 1}:\n{instruction}")
+    if "segue ate ao elevador" in instruction or "segue até ao elevador" in instruction:
+        raise AssertionError(
+            f"{context}: saída do elevador ainda manda seguir até ao elevador no passo {index + 1}:\n{instruction}"
+        )
 
 
 def assert_movement_semantics(core, graph, current: str, next_node: str, edge: dict):

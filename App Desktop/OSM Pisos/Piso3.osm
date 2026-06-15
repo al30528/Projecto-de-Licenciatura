@@ -532,14 +532,6 @@
     <tag k='bidirectional' v='true' />
     <tag k='edge_type' v='connection' />
   </way>
-  <way id='-1859' action='modify' visible='true'>
-    <nd ref='-27055' />
-    <nd ref='-27056' />
-    <nd ref='-27057' />
-    <tag k='accessibility' v='2' />
-    <tag k='bidirectional' v='true' />
-    <tag k='edge_type' v='stairs' />
-  </way>
   <way id='-1861' action='modify' visible='true'>
     <nd ref='-27059' />
     <nd ref='-27058' />
@@ -581,5 +573,19 @@
     <tag k='accessibility' v='1' />
     <tag k='bidirectional' v='true' />
     <tag k='edge_type' v='connection' />
+  </way>
+  <way id='-2654' action='modify' visible='true'>
+    <nd ref='-27055' />
+    <nd ref='-27056' />
+    <tag k='accessibility' v='1' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='connection' />
+  </way>
+  <way id='-2655' action='modify' visible='true'>
+    <nd ref='-27057' />
+    <nd ref='-27056' />
+    <tag k='accessibility' v='2' />
+    <tag k='bidirectional' v='true' />
+    <tag k='edge_type' v='stairs' />
   </way>
 </osm>

@@ -1048,9 +1048,9 @@ def movement_phrase(graph, path: list[str], index: int):
     next_type = str(graph.nodes[path[index + 1]].get("type", "")).lower()
     current_floor = str(graph.nodes[path[index]].get("floor_key", ""))
     next_floor = str(graph.nodes[path[index + 1]].get("floor_key", ""))
-    # Algumas escadas estao desenhadas como varios segmentos consecutivos na
-    # mesma way. Guardo o tipo anterior para nao repetir "segue ate as escadas"
-    # quando o utilizador ja vem precisamente dessas escadas.
+    # Algumas escadas/elevadores estao desenhados como varios segmentos
+    # consecutivos. Guardo o tipo anterior para nao voltar a anunciar o mesmo
+    # elemento fisico quando o utilizador ja vem dele.
     previous_edge_type = ""
     if index > 0:
         previous_edge = graph[path[index - 1]][path[index]]
@@ -1083,7 +1083,11 @@ def movement_phrase(graph, path: list[str], index: int):
             return "avança"
         return "segue até às escadas"
     if edge_type == "elevator":
+        if previous_edge_type == "elevator" and current_type == "elevator":
+            return "sai do elevador e avança"
         return "segue até ao elevador"
+    if previous_edge_type == "elevator" and current_type == "elevator":
+        return "sai do elevador e avança"
     if hint:
         return f"segue {hint}"
     return "avança"
@@ -1094,6 +1098,8 @@ def movement_with_distance(phrase: str, distance: float):
 
     if phrase == "avança":
         return f"avança {distance:.1f} m"
+    if phrase == "sai do elevador e avança":
+        return f"sai do elevador e avança {distance:.1f} m"
     return f"{phrase} ({distance:.1f} m)"
 
 
